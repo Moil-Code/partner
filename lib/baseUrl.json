@@ -1,4 +1,4 @@
 {
-  "staging": "https://partners-staging.moilapp.com",
+  "staging": "https://partner-m7cn.vercel.app",
   "production": "https://partners.moilapp.com"
 }
