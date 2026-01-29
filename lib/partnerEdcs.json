@@ -1,0 +1,48 @@
+{
+    "partners": [
+        {
+            "id": "moil-default",
+            "name": "Moil Partners",
+            "fullName": "Moil",
+            "programName": "Moil Partners",
+            "domain": "moilapp.com",
+            "city": "",
+            "state": "",
+            "country": "US",
+            "primaryColor": "#6366F1",
+            "accentColor": "#F59E0B",
+            "textColor": "#1F2A44",
+            "logoInitial": "M",
+            "supportEmail": "cs@moilapp.com",
+            "licenseDuration": "1 year",
+            "features": {
+                "jobPosts": 3,
+                "aiCoach": true,
+                "marketResearch": true,
+                "businessTemplates": true
+            }
+        },
+        {
+            "id": "queen-creek-chamber",
+            "name": "Queen Creek EDC",
+            "fullName": "Queen Creek Chamber of Commerce",
+            "programName": "Queen Creek Chamber",
+            "domain": "queencreekchamber.com",
+            "city": "Queen Creek",
+            "state": "AZ",
+            "country": "US",
+            "primaryColor": "#0073B5",
+            "accentColor": "#F7AB3B",
+            "textColor": "#1F2A44",
+            "logoInitial": "Q",
+            "supportEmail": "cs@moilapp.com",
+            "licenseDuration": "1 year",
+            "features": {
+                "jobPosts": 3,
+                "aiCoach": true,
+                "marketResearch": true,
+                "businessTemplates": true
+            }
+        }
+    ]
+}

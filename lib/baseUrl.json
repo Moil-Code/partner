@@ -1,0 +1,4 @@
+{
+  "staging": "https://partners-staging.moilapp.com",
+  "production": "https://partners.moilapp.com"
+}
