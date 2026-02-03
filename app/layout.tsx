@@ -8,9 +8,26 @@ export const metadata: Metadata = {
   title: "Moil Partners - Business License Management",
   description: "Moil's official partner dashboard for business license management and white-label activation",
   icons: {
-    icon: "/moil-logo.png",
-    apple: "/moil-logo.png",
+    icon: "/favicon-32x32.png",
+    apple: "/favicon-128x128.png",
   },
+  openGraph: {
+    title: "Moil Partners - Business License Management",
+    description: "Moil's official partner dashboard for business license management and white-label activation",
+    images: [
+      {
+        url: "https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png",
+        width: 1200,
+        height: 630,
+        alt: "Moil Partners - Business License Management",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png"],
+  },
+
 };
 
 export default function RootLayout({
