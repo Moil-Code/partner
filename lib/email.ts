@@ -126,9 +126,9 @@ function edcToEmailInfo(edc: PartnerEdc): EdcEmailInfo {
   return {
     programName: edc.programName,
     fullName: edc.fullName,
-    logo: edc.logo || getLogoUrl(),
-    logoInitial: edc.logoInitial,
-    primaryColor: edc.primaryColor,
+    logo: edc.branding?.logoUrl || edc.logo || getLogoUrl(),
+    logoInitial: edc.branding?.logoInitial || edc.logoInitial || edc.name.charAt(0),
+    primaryColor: edc.branding?.primaryColor || edc.primaryColor || '#6366F1',
     supportEmail: edc.supportEmail,
     licenseDuration: edc.licenseDuration,
     jobPosts: edc.features.jobPosts,

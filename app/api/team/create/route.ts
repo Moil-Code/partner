@@ -14,10 +14,10 @@ export async function POST(request: Request) {
 
     const { name } = await request.json();
 
-    // Get admin info including purchased_license_count
+    // Get admin info including purchased_license_count and partner_id
     const { data: adminData, error: adminError } = await supabase
       .from('admins')
-      .select('email, first_name, last_name, purchased_license_count')
+      .select('email, first_name, last_name, purchased_license_count, partner_id')
       .eq('id', user.id)
       .single();
 
@@ -51,13 +51,14 @@ export async function POST(request: Request) {
       teamName = `${adminData.first_name}'s ${orgName} Team`;
     }
 
-    // Create team
+    // Create team with partner_id
     const { data: team, error: teamError } = await supabase
       .from('teams')
       .insert({
         name: teamName,
         domain: domain,
         owner_id: user.id,
+        partner_id: adminData.partner_id,
       })
       .select()
       .single();

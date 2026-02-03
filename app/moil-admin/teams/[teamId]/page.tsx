@@ -1,0 +1,698 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { useToast } from '@/components/ui/toast/use-toast';
+import Logo from '@/components/ui/Logo';
+import { 
+  ArrowLeft,
+  Building2,
+  Users,
+  Key,
+  Mail,
+  CheckCircle,
+  Clock,
+  Copy,
+  Link,
+  Eye,
+  Shield,
+  Activity,
+  Calendar,
+  User,
+  Plus,
+  Send
+} from 'lucide-react';
+
+interface Team {
+  id: string;
+  name: string;
+  domain: string;
+  partner_id: string;
+  owner_id: string;
+  purchased_license_count: number;
+  created_at: string;
+}
+
+interface Partner {
+  id: string;
+  name: string;
+  domain: string;
+  primary_color: string;
+  logo_url?: string;
+}
+
+interface TeamMember {
+  id: string;
+  admin_id: string;
+  role: string;
+  joined_at: string;
+  admin: {
+    email: string;
+    first_name: string;
+    last_name: string;
+  };
+}
+
+interface License {
+  id: string;
+  email: string;
+  business_name: string;
+  is_activated: boolean;
+  activated_at: string | null;
+  created_at: string;
+}
+
+interface TeamInvitation {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  token: string;
+  expires_at: string;
+  created_at: string;
+}
+
+interface Stats {
+  totalLicenses: number;
+  activatedLicenses: number;
+  pendingLicenses: number;
+  teamMembers: number;
+  pendingInvitations: number;
+}
+
+export default function TeamViewPage() {
+  const router = useRouter();
+  const params = useParams();
+  const teamId = params.teamId as string;
+  const { toast } = useToast();
+  
+  const [loading, setLoading] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [team, setTeam] = useState<Team | null>(null);
+  const [partner, setPartner] = useState<Partner | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [licenses, setLicenses] = useState<License[]>([]);
+  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    totalLicenses: 0,
+    activatedLicenses: 0,
+    pendingLicenses: 0,
+    teamMembers: 0,
+    pendingInvitations: 0,
+  });
+  const [showAddLicense, setShowAddLicense] = useState(false);
+  const [newLicenseEmail, setNewLicenseEmail] = useState('');
+  const [addingLicense, setAddingLicense] = useState(false);
+
+  useEffect(() => {
+    if (teamId) {
+      checkAuthorizationAndFetch();
+    }
+  }, [teamId]);
+
+  const checkAuthorizationAndFetch = async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        router.push('/login');
+        return;
+      }
+
+      // Check if user is Moil admin
+      const { data: admin, error: adminError } = await supabase
+        .from('admins')
+        .select('email, global_role')
+        .eq('id', user.id)
+        .single();
+
+      if (adminError || !admin || !admin.email.endsWith('@moilapp.com')) {
+        toast({
+          title: 'Access Denied',
+          description: 'This page is only accessible to Moil admins',
+          type: 'error',
+        });
+        router.push('/admin/dashboard');
+        return;
+      }
+
+      setIsAuthorized(true);
+      await fetchTeamData();
+    } catch (error) {
+      console.error('Authorization error:', error);
+      router.push('/login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTeamData = async () => {
+    try {
+      const supabase = createClient();
+
+      // Fetch team
+      const { data: teamData, error: teamError } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .single();
+    
+      console.log(teamData);
+
+      if (teamError || !teamData) {
+        toast({
+          title: 'Error',
+          description: 'Team not found',
+          type: 'error',
+        });
+        router.push('/moil-admin/dashboard');
+        return;
+      }
+
+      setTeam(teamData);
+
+      // Fetch partner
+      if (teamData.partner_id) {
+        const { data: partnerData } = await supabase
+          .from('partners')
+          .select('id, name, domain, primary_color, logo_url')
+          .eq('id', teamData.partner_id)
+          .single();
+
+        if (partnerData) {
+          setPartner(partnerData);
+        }
+      }
+
+      // Fetch team members with admin info
+      const { data: membersData } = await supabase
+        .from('team_members')
+        .select(`
+          id,
+          admin_id,
+          role,
+          joined_at,
+          admins (email, first_name, last_name)
+        `)
+        .eq('team_id', teamId);
+
+      if (membersData) {
+        const formattedMembers = membersData.map((m: any) => ({
+          id: m.id,
+          admin_id: m.admin_id,
+          role: m.role,
+          joined_at: m.joined_at,
+          admin: {
+            email: m.admins?.email || '',
+            first_name: m.admins?.first_name || '',
+            last_name: m.admins?.last_name || '',
+          }
+        }));
+        setMembers(formattedMembers);
+      }
+
+      // Fetch licenses
+      const { data: licensesData } = await supabase
+        .from('licenses')
+        .select('id, email, business_name, is_activated, activated_at, created_at')
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: false });
+
+      if (licensesData) {
+        setLicenses(licensesData);
+      }
+
+      // Fetch pending invitations
+      const { data: invitationsData } = await supabase
+        .from('team_invitations')
+        .select('id, email, role, status, token, expires_at, created_at')
+        .eq('team_id', teamId)
+        .eq('status', 'pending');
+
+      if (invitationsData) {
+        setInvitations(invitationsData);
+      }
+
+      // Calculate stats
+      const totalLicenses = licensesData?.length || 0;
+      const activatedLicenses = licensesData?.filter((l: License) => l.is_activated).length || 0;
+      
+      setStats({
+        totalLicenses,
+        activatedLicenses,
+        pendingLicenses: totalLicenses - activatedLicenses,
+        teamMembers: membersData?.length || 0,
+        pendingInvitations: invitationsData?.length || 0,
+      });
+
+    } catch (error) {
+      console.error('Error fetching team data:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load team data',
+        type: 'error',
+      });
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: 'Copied',
+      description: 'Link copied to clipboard',
+      type: 'success',
+    });
+  };
+
+  const getInvitationLink = (token: string) => {
+    return `${window.location.origin}/invite/${token}`;
+  };
+
+  const handleAddLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLicenseEmail.trim() || !team) return;
+
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!emailRegex.test(newLicenseEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        type: 'error',
+      });
+      return;
+    }
+
+    setAddingLicense(true);
+    try {
+      const response = await fetch('/api/licenses/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newLicenseEmail.trim().toLowerCase(),
+          teamId: team.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        toast({
+          title: 'Error',
+          description: data.error,
+          type: 'error',
+        });
+        return;
+      }
+
+      toast({
+        title: 'License Added',
+        description: `License added for ${newLicenseEmail}`,
+        type: 'success',
+      });
+
+      setNewLicenseEmail('');
+      setShowAddLicense(false);
+      await fetchTeamData();
+    } catch (error) {
+      console.error('Error adding license:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add license',
+        type: 'error',
+      });
+    } finally {
+      setAddingLicense(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+        <div className="text-center">
+          <Spinner size="lg" variant="primary" className="mx-auto" />
+          <p className="mt-4 text-[var(--text-secondary)]">Loading team data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthorized || !team) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-[var(--background)] font-sans text-[var(--text-primary)]">
+      {/* Header */}
+      <header className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-50">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Logo size="sm" showText={false} />
+              <div>
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[var(--text-tertiary)]" />
+                  <span className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Read-Only View</span>
+                </div>
+                <h1 className="text-xl font-bold text-[var(--text-primary)]">{team.name}</h1>
+              </div>
+            </div>
+            <Button variant="ghost" onClick={() => router.push('/moil-admin/dashboard')}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-6 py-8">
+        {/* Partner Info Banner */}
+        {partner && (
+          <div className="mb-6 p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)] flex items-center gap-4">
+            <div 
+              className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold text-lg"
+              style={{ backgroundColor: partner.primary_color || 'var(--primary)' }}
+            >
+              {partner.name.charAt(0)}
+            </div>
+            <div>
+              <p className="text-sm text-[var(--text-tertiary)]">Partner Organization</p>
+              <p className="font-semibold text-[var(--text-primary)]">{partner.name}</p>
+              <p className="text-sm text-[var(--text-secondary)] font-mono">{partner.domain}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Card variant="glass">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
+                  <Key className="w-5 h-5 text-[var(--primary)]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-[var(--text-primary)]">{stats.totalLicenses}</p>
+                  <p className="text-xs text-[var(--text-tertiary)]">Total Licenses</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card variant="glass">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[var(--accent)]/10 flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-[var(--accent)]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-[var(--accent)]">{stats.activatedLicenses}</p>
+                  <p className="text-xs text-[var(--text-tertiary)]">Activated</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card variant="glass">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[var(--warning)]/10 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-[var(--warning)]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-[var(--warning)]">{stats.pendingLicenses}</p>
+                  <p className="text-xs text-[var(--text-tertiary)]">Pending</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card variant="glass">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[var(--info)]/10 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-[var(--info)]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-[var(--info)]">{stats.teamMembers}</p>
+                  <p className="text-xs text-[var(--text-tertiary)]">Team Members</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Team Members */}
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-[var(--text-primary)]">
+                <Users className="w-5 h-5" />
+                Team Members
+              </CardTitle>
+              <CardDescription>{members.length} member{members.length !== 1 ? 's' : ''}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {members.map((member) => (
+                  <div key={member.id} className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
+                    <div className="w-10 h-10 rounded-full bg-[var(--primary)]/10 flex items-center justify-center text-[var(--primary)] font-bold">
+                      {member.admin.first_name?.charAt(0) || member.admin.email.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[var(--text-primary)] truncate">
+                        {member.admin.first_name && member.admin.last_name 
+                          ? `${member.admin.first_name} ${member.admin.last_name}`
+                          : member.admin.email}
+                      </p>
+                      <p className="text-xs text-[var(--text-tertiary)] truncate">{member.admin.email}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      member.role === 'owner' 
+                        ? 'bg-[var(--primary)]/10 text-[var(--primary)]' 
+                        : 'bg-[var(--surface-hover)] text-[var(--text-secondary)]'
+                    }`}>
+                      {member.role}
+                    </span>
+                  </div>
+                ))}
+                {members.length === 0 && (
+                  <p className="text-center text-[var(--text-tertiary)] py-4">No team members</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pending Invitations */}
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-[var(--text-primary)]">
+                <Mail className="w-5 h-5" />
+                Pending Invitations
+              </CardTitle>
+              <CardDescription>{invitations.length} pending</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {invitations.map((invitation) => (
+                  <div key={invitation.id} className="p-3 bg-[var(--surface-subtle)] rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium text-[var(--text-primary)] text-sm truncate">{invitation.email}</p>
+                      <span className="px-2 py-0.5 bg-[var(--warning)]/10 text-[var(--warning)] rounded-full text-xs">
+                        {invitation.role}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={getInvitationLink(invitation.token)}
+                        readOnly
+                        className="flex-1 px-2 py-1 bg-[var(--surface)] border border-[var(--border)] rounded text-xs font-mono text-[var(--text-tertiary)] truncate"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(getInvitationLink(invitation.token))}
+                        className="shrink-0"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                      Expires: {new Date(invitation.expires_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))}
+                {invitations.length === 0 && (
+                  <p className="text-center text-[var(--text-tertiary)] py-4">No pending invitations</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Team Info */}
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-[var(--text-primary)]">
+                <Activity className="w-5 h-5" />
+                Team Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
+                  <Building2 className="w-5 h-5 text-[var(--text-tertiary)]" />
+                  <div>
+                    <p className="text-xs text-[var(--text-tertiary)]">Team Name</p>
+                    <p className="font-medium text-[var(--text-primary)]">{team.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
+                  <Mail className="w-5 h-5 text-[var(--text-tertiary)]" />
+                  <div>
+                    <p className="text-xs text-[var(--text-tertiary)]">Domain</p>
+                    <p className="font-medium text-[var(--text-primary)] font-mono">{team.domain}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
+                  <Key className="w-5 h-5 text-[var(--text-tertiary)]" />
+                  <div>
+                    <p className="text-xs text-[var(--text-tertiary)]">Purchased Licenses</p>
+                    <p className="font-medium text-[var(--text-primary)]">{team.purchased_license_count}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
+                  <Calendar className="w-5 h-5 text-[var(--text-tertiary)]" />
+                  <div>
+                    <p className="text-xs text-[var(--text-tertiary)]">Created</p>
+                    <p className="font-medium text-[var(--text-primary)]">
+                      {new Date(team.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Licenses Table */}
+        <Card variant="glass" className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-[var(--text-primary)]">
+                  <Key className="w-5 h-5" />
+                  Assigned Licenses
+                </CardTitle>
+                <CardDescription>{licenses.length} license{licenses.length !== 1 ? 's' : ''} assigned</CardDescription>
+              </div>
+              <Button
+                onClick={() => setShowAddLicense(!showAddLicense)}
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add License
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Add License Form */}
+            {showAddLicense && (
+              <form onSubmit={handleAddLicense} className="mb-6 p-4 bg-[var(--surface-subtle)] rounded-lg border border-[var(--border)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="email"
+                      value={newLicenseEmail}
+                      onChange={(e) => setNewLicenseEmail(e.target.value)}
+                      placeholder="Enter email address"
+                      className="w-full px-4 py-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] text-[var(--text-primary)]"
+                      disabled={addingLicense}
+                    />
+                  </div>
+                  <Button type="submit" disabled={addingLicense || !newLicenseEmail.trim()}>
+                    {addingLicense ? (
+                      <Spinner size="sm" className="mr-2" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-2" />
+                    )}
+                    {addingLicense ? 'Adding...' : 'Add & Send'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowAddLicense(false);
+                      setNewLicenseEmail('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                  An activation email will be sent to the provided email address.
+                </p>
+              </form>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Email</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Business</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Status</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {licenses.map((license) => (
+                    <tr key={license.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-subtle)]">
+                      <td className="py-3 px-4">
+                        <p className="text-[var(--text-primary)]">{license.email}</p>
+                      </td>
+                      <td className="py-3 px-4 text-[var(--text-secondary)]">
+                        {license.business_name || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          license.is_activated 
+                            ? 'bg-[var(--accent)]/10 text-[var(--accent)]' 
+                            : 'bg-[var(--warning)]/10 text-[var(--warning)]'
+                        }`}>
+                          {license.is_activated ? (
+                            <>
+                              <CheckCircle className="w-3 h-3" />
+                              Activated
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-3 h-3" />
+                              Pending
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-[var(--text-tertiary)] text-sm">
+                        {new Date(license.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {licenses.length === 0 && (
+                <div className="text-center py-8">
+                  <Key className="w-12 h-12 text-[var(--text-tertiary)] mx-auto mb-3" />
+                  <p className="text-[var(--text-secondary)]">No licenses assigned yet</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -78,10 +78,24 @@ export async function PATCH(
 
     const body = await request.json();
 
-    // Partner admins can only update name
-    const partnerAdminAllowedFields = ['name'];
+    // Partner admins can update name and branding fields
+    const partnerAdminAllowedFields = [
+      'name',
+      'program_name',
+      'full_name',
+      'primary_color',
+      'secondary_color',
+      'accent_color',
+      'text_color',
+      'logo_url',
+      'logo_initial',
+      'font_family',
+      'support_email',
+      'license_duration',
+      'features'
+    ];
 
-    // Moil admins can update all fields
+    // Moil admins can update all fields including these restricted ones
     const moilAdminOnlyFields = ['domain', 'status'];
 
     // Filter update data based on role

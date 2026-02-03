@@ -18,7 +18,10 @@ interface Partner {
   name: string;
   program_name: string;
   logo_url?: string;
+  logo_initial?: string;
   primary_color: string;
+  secondary_color?: string;
+  font_family?: string;
 }
 
 interface License {
@@ -64,6 +67,24 @@ const DashboardPage = () => {
     fetchLicenseStats();
     handleUrlParams();
   }, []);
+
+  const applyBrandIdentity = (partnerData: Partner) => {
+    const root = document.documentElement;
+    
+    if (partnerData.primary_color) {
+      root.style.setProperty('--primary', partnerData.primary_color);
+      root.style.setProperty('--primary-hover', partnerData.primary_color);
+    }
+    
+    if (partnerData.secondary_color) {
+      root.style.setProperty('--secondary', partnerData.secondary_color);
+    }
+    
+    if (partnerData.font_family) {
+      root.style.setProperty('--font-family', partnerData.font_family);
+      document.body.style.fontFamily = `${partnerData.font_family}, sans-serif`;
+    }
+  };
 
   const handleUrlParams = () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -140,7 +161,7 @@ const DashboardPage = () => {
       if (!validRoles.includes(adminData.global_role)) {
         // Moil admins should go to moil-admin dashboard
         if (adminData.global_role === 'moil_admin') {
-          router.push('/moil-admin');
+          router.push('/moil-admin/dashboard');
           return;
         }
         console.log('User does not have valid role for partner dashboard');
@@ -152,12 +173,14 @@ const DashboardPage = () => {
       if (adminData.partner_id) {
         const { data: partnerData } = await supabase
           .from('partners')
-          .select('id, name, program_name, logo_url, primary_color')
+          .select('id, name, program_name, logo_url, logo_initial, primary_color, secondary_color, font_family')
           .eq('id', adminData.partner_id)
           .single();
         
         if (partnerData) {
           setPartner(partnerData);
+          // Apply partner brand identity to CSS variables
+          applyBrandIdentity(partnerData);
         }
       }
 
@@ -269,6 +292,8 @@ const DashboardPage = () => {
         onLogout={handleLogout}
         partnerName={partner?.program_name || partner?.name}
         partnerLogo={partner?.logo_url}
+        partnerLogoInitial={partner?.logo_initial}
+        partnerPrimaryColor={partner?.primary_color}
       />
 
       <main className="layout-container pb-20 space-y-8 animate-fade-in">

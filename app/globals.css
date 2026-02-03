@@ -82,58 +82,100 @@
   --radius-2xl: 1.5rem;
 }
 
+/* Dark mode via class (for manual toggle) */
+:root.dark,
+html.dark {
+  /* ============================================
+     DARK MODE COLOR SYSTEM (WCAG AA Compliant)
+     ============================================ */
+  
+  /* Background System - Dark Mode */
+  --background: #0F172A;           /* Main page background */
+  --background-alt: #1E293B;       /* Alternative background */
+  
+  /* Surface System - Dark Mode */
+  --surface: #1E293B;              /* Cards, modals, panels */
+  --surface-subtle: #334155;       /* Subtle backgrounds, inputs */
+  --surface-hover: #475569;        /* Hover states */
+  --surface-glass: rgba(30, 41, 59, 0.9);
+  
+  /* Border System - Dark Mode */
+  --border: #475569;               /* Default borders - better contrast */
+  --border-light: #334155;         /* Light borders */
+  --border-strong: #64748B;        /* Strong borders */
+  
+  /* Text System - Dark Mode (WCAG AA: 4.5:1 on dark) */
+  --text-primary: #F8FAFC;         /* Very light - high contrast */
+  --text-secondary: #E2E8F0;       /* Light gray - good contrast */
+  --text-tertiary: #CBD5E1;        /* Medium gray - readable */
+  --text-inverse: #0F172A;         /* Dark text on light backgrounds */
+  --text-muted: #94A3B8;           /* Muted text, captions */
+  
+  /* Input System - Dark Mode */
+  --input-bg: #1E293B;             /* Input background */
+  --input-border: #475569;         /* Input border */
+  --input-border-hover: #64748B;   /* Input border on hover */
+  --input-border-focus: var(--primary-light);
+  --input-text: #F8FAFC;           /* Input text color */
+  --input-placeholder: #94A3B8;    /* Placeholder text */
+  
+  /* Glass & Effects - Dark Mode */
+  --glass: rgba(30, 41, 59, 0.85);
+  --glass-border: rgba(71, 85, 105, 0.6);
+  --glass-hover: rgba(30, 41, 59, 0.95);
+  
+  /* State Colors - Dark Mode */
+  --success: #34D399;
+  --success-bg: #064E3B;
+  --warning: #FBBF24;
+  --warning-bg: #78350F;
+  --error: #F87171;
+  --error-bg: #7F1D1D;
+  --info: #60A5FA;
+  --info-bg: #1E3A8A;
+  
+  /* Shadow System - Dark Mode (lighter for visibility) */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* System preference fallback when no class is set */
 @media (prefers-color-scheme: dark) {
-  :root {
-    /* ============================================
-       DARK MODE COLOR SYSTEM (WCAG AA Compliant)
-       ============================================ */
-    
+  :root:not(.light):not(.dark) {
     /* Background System - Dark Mode */
-    --background: #0F172A;           /* Main page background */
-    --background-alt: #1E293B;       /* Alternative background */
-    
-    /* Surface System - Dark Mode */
-    --surface: #1E293B;              /* Cards, modals, panels */
-    --surface-subtle: #334155;       /* Subtle backgrounds, inputs */
-    --surface-hover: #475569;        /* Hover states */
+    --background: #0F172A;
+    --background-alt: #1E293B;
+    --surface: #1E293B;
+    --surface-subtle: #334155;
+    --surface-hover: #475569;
     --surface-glass: rgba(30, 41, 59, 0.9);
-    
-    /* Border System - Dark Mode */
-    --border: #475569;               /* Default borders - better contrast */
-    --border-light: #334155;         /* Light borders */
-    --border-strong: #64748B;        /* Strong borders */
-    
-    /* Text System - Dark Mode (WCAG AA: 4.5:1 on dark) */
-    --text-primary: #F1F5F9;         /* Contrast 13.8:1 - Primary text */
-    --text-secondary: #CBD5E1;       /* Contrast 10.2:1 - Secondary text */
-    --text-tertiary: #94A3B8;        /* Contrast 5.8:1 - Tertiary text */
-    --text-inverse: #0F172A;         /* Dark text on light backgrounds */
-    --text-muted: #64748B;           /* Muted text, captions */
-    
-    /* Input System - Dark Mode */
-    --input-bg: #1E293B;             /* Input background */
-    --input-border: #475569;         /* Input border */
-    --input-border-hover: #64748B;   /* Input border on hover */
+    --border: #475569;
+    --border-light: #334155;
+    --border-strong: #64748B;
+    --text-primary: #F8FAFC;
+    --text-secondary: #E2E8F0;
+    --text-tertiary: #CBD5E1;
+    --text-inverse: #0F172A;
+    --text-muted: #94A3B8;
+    --input-bg: #1E293B;
+    --input-border: #475569;
+    --input-border-hover: #64748B;
     --input-border-focus: var(--primary-light);
-    --input-text: #F1F5F9;           /* Input text color */
-    --input-placeholder: #94A3B8;    /* Placeholder text */
-    
-    /* Glass & Effects - Dark Mode */
-    --glass: rgba(30, 41, 59, 0.7);
-    --glass-border: rgba(71, 85, 105, 0.5);
-    --glass-hover: rgba(30, 41, 59, 0.85);
-    
-    /* State Colors - Dark Mode */
-    --success: #10B981;
+    --input-text: #F8FAFC;
+    --input-placeholder: #94A3B8;
+    --glass: rgba(30, 41, 59, 0.85);
+    --glass-border: rgba(71, 85, 105, 0.6);
+    --glass-hover: rgba(30, 41, 59, 0.95);
+    --success: #34D399;
     --success-bg: #064E3B;
-    --warning: #F59E0B;
+    --warning: #FBBF24;
     --warning-bg: #78350F;
-    --error: #EF4444;
+    --error: #F87171;
     --error-bg: #7F1D1D;
-    --info: #3B82F6;
+    --info: #60A5FA;
     --info-bg: #1E3A8A;
-    
-    /* Shadow System - Dark Mode (lighter for visibility) */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);

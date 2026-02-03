@@ -22,6 +22,9 @@ function SignupContent() {
   const teamName = searchParams.get('teamName');
   const redirectUrl = searchParams.get('redirect');
   
+  // Get partner signup parameters (from Moil admin created partner)
+  const partnerId = searchParams.get('partnerId');
+  
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [organizationName, setOrganizationName] = useState('');
@@ -30,9 +33,35 @@ function SignupContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [extractedDomain, setExtractedDomain] = useState('');
+  const [partnerInfo, setPartnerInfo] = useState<{ name: string; domain: string } | null>(null);
+  
+  // Check if this is a partner admin signup (from Moil admin created link)
+  const isPartnerAdminSignup = !!partnerId;
   
   // Check if this is an invite signup
   const isInviteSignup = !!inviteToken;
+  
+  // Check if this is a Moil admin signup (@moilapp.com)
+  const isMoilAdminSignup = extractedDomain === 'moilapp.com' && !isPartnerAdminSignup;
+  
+  // Fetch partner info if partnerId is provided
+  React.useEffect(() => {
+    if (partnerId) {
+      const fetchPartnerInfo = async () => {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('partners')
+          .select('name, domain')
+          .eq('id', partnerId)
+          .single();
+        if (data) {
+          setPartnerInfo(data);
+          setOrganizationName(data.name);
+        }
+      };
+      fetchPartnerInfo();
+    }
+  }, [partnerId]);
 
   // Extract domain from email
   const handleEmailChange = (value: string) => {
@@ -71,8 +100,8 @@ function SignupContent() {
       return;
     }
 
-    // Validate organization name for partner requests
-    if (!isInviteSignup && (!organizationName || organizationName.trim().length < 2)) {
+    // Validate organization name for partner requests (not required for Moil admins or partner admin signup)
+    if (!isInviteSignup && !isMoilAdminSignup && !isPartnerAdminSignup && (!organizationName || organizationName.trim().length < 2)) {
       toast({
         title: "Invalid Organization Name",
         description: "Please enter a valid organization name",
@@ -127,6 +156,134 @@ function SignupContent() {
 
         setTimeout(() => {
           router.push(`/login?redirect=/invite/accept?token=${inviteToken}`);
+        }, 2000);
+      } else if (isPartnerAdminSignup && partnerId) {
+        // Partner admin signup - link to existing partner created by Moil admin
+        const supabase = createClient();
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              first_name: firstName,
+              last_name: lastName,
+              role: 'partner_admin',
+            },
+          },
+        });
+
+        if (signUpError) {
+          toast({
+            title: "Signup Failed",
+            description: signUpError.message,
+            type: "error"
+          });
+          console.error("Signup error:", signUpError);
+          setLoading(false);
+          return;
+        }
+
+        if (!authData.user) {
+          toast({
+            title: "Signup Failed",
+            description: "Failed to create user account",
+            type: "error"
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Update admin record to link to the partner (record was auto-created by trigger)
+        const { error: adminError } = await supabase
+          .from('admins')
+          .upsert({
+            id: authData.user.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            global_role: 'partner_admin',
+            partner_id: partnerId,
+          }, {
+            onConflict: 'id'
+          });
+
+        if (adminError) {
+          console.error("Admin creation error:", adminError);
+          toast({
+            title: "Account Created",
+            description: "Your account was created but there was an issue linking to the partner. Please contact support.",
+            type: "warning"
+          });
+        } else {
+          toast({
+            title: "Account Created!",
+            description: `Your account has been created and linked to ${partnerInfo?.name || 'your organization'}. You can now sign in.`,
+            type: "success"
+          });
+        }
+
+        setTimeout(() => {
+          router.push('/login');
+        }, 2000);
+      } else if (isMoilAdminSignup) {
+        // Moil admin signup - direct signup without partner creation
+        const supabase = createClient();
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              role: 'moil_admin',
+            },
+          },
+        });
+
+        if (signUpError) {
+          toast({
+            title: "Signup Failed",
+            description: signUpError.message,
+            type: "error"
+          });
+          console.error("Signup error:", signUpError);
+          setLoading(false);
+          return;
+        }
+
+        if (!authData.user) {
+          toast({
+            title: "Signup Failed",
+            description: "Failed to create user account",
+            type: "error"
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Update admin record with moil_admin role (record was auto-created by trigger)
+        const { error: adminError } = await supabase
+          .from('admins')
+          .upsert({
+            id: authData.user.id,
+            email: email,
+            global_role: 'moil_admin',
+            partner_id: null,
+          }, {
+            onConflict: 'id'
+          });
+
+        if (adminError) {
+          console.error("Admin creation error:", adminError);
+          // Don't fail - the user is created, they can still log in
+        }
+
+        toast({
+          title: "Account Created!",
+          description: "Your Moil admin account has been created. You can now sign in.",
+          type: "success"
+        });
+
+        setTimeout(() => {
+          router.push('/login');
         }, 2000);
       } else {
         // Partner access request flow:
@@ -191,8 +348,8 @@ function SignupContent() {
         }
 
         toast({
-          title: "Request Submitted!",
-          description: "Your partner access request has been submitted. Moil admins will review and approve your organization.",
+          title: "Account Created!",
+          description: "Your partner account has been created. You can now sign in and set up your branding.",
           type: "success"
         });
 
@@ -200,9 +357,9 @@ function SignupContent() {
           if (redirectUrl) {
             router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
           } else {
-            router.push('/login?message=access_requested');
+            router.push('/login');
           }
-        }, 3000);
+        }, 2000);
       }
     } catch (err) {
       toast({
@@ -232,12 +389,28 @@ function SignupContent() {
                 </div>
             </Link>
             <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-              {isInviteSignup ? 'Create Account' : 'Request Partner Access'}
+              {isInviteSignup ? 'Create Account' : isPartnerAdminSignup ? 'Partner Admin Signup' : isMoilAdminSignup ? 'Moil Admin Signup' : 'Request Partner Access'}
             </h1>
             <p className="text-[var(--text-secondary)] text-sm mt-1">
-              {isInviteSignup ? 'Create your account to join the team' : 'Submit your organization details to request access'}
+              {isInviteSignup ? 'Create your account to join the team' : isPartnerAdminSignup ? `Create your admin account for ${partnerInfo?.name || 'your organization'}` : isMoilAdminSignup ? 'Create your Moil admin account' : 'Submit your organization details to request access'}
             </p>
           </div>
+
+          {/* Partner Admin Signup Banner */}
+          {isPartnerAdminSignup && partnerInfo && (
+            <div className="bg-gradient-to-r from-[var(--primary)] to-[var(--primary-600)] rounded-xl p-5 mb-6 text-white animate-fade-in shadow-lg border border-white/10">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm shadow-sm">
+                  <Building2 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-white/80 text-sm font-medium">You're joining as admin for</p>
+                  <p className="text-xl font-bold tracking-tight">{partnerInfo.name}</p>
+                  <p className="text-white/60 text-xs font-mono mt-1">{partnerInfo.domain}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Team Invite Banner */}
           {isInviteSignup && teamName && (
@@ -259,7 +432,7 @@ function SignupContent() {
           <Card variant="glass" className="border-t-4 border-t-[var(--primary)] shadow-2xl">
             <CardContent className="p-8">
               <form onSubmit={handleSubmit} className="space-y-5">
-                {isInviteSignup ? (
+                {(isInviteSignup || isPartnerAdminSignup) ? (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">First Name</label>
@@ -286,7 +459,7 @@ function SignupContent() {
                       />
                     </div>
                   </div>
-                ) : (
+                ) : !isMoilAdminSignup ? (
                   <div>
                     <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Organization Name</label>
                     <div className="relative group">
@@ -302,7 +475,7 @@ function SignupContent() {
                       <Building2 className="w-5 h-5 text-[var(--text-tertiary)] absolute left-3.5 top-3.5 group-focus-within:text-[var(--primary)] transition-colors" />
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
@@ -357,12 +530,34 @@ function SignupContent() {
                   </div>
                 </div>
 
-                {!isInviteSignup && (
+                {isPartnerAdminSignup && (
+                  <div className="bg-[var(--accent)]/5 p-4 rounded-xl border border-[var(--accent)]/10">
+                    <div className="flex gap-3">
+                        <Shield className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                            Your account will be automatically linked to <strong>{partnerInfo?.name || 'your organization'}</strong>. You'll be able to manage licenses and team members after signing in.
+                        </p>
+                    </div>
+                  </div>
+                )}
+
+                {!isInviteSignup && !isMoilAdminSignup && !isPartnerAdminSignup && (
                   <div className="bg-[var(--primary)]/5 p-4 rounded-xl border border-[var(--primary)]/10">
                     <div className="flex gap-3">
                         <Shield className="w-5 h-5 text-[var(--primary)] flex-shrink-0 mt-0.5" />
                         <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
                             Partner access requests require approval from Moil admins. You will receive an email once your organization has been verified and approved.
+                        </p>
+                    </div>
+                  </div>
+                )}
+                
+                {isMoilAdminSignup && (
+                  <div className="bg-[var(--secondary)]/5 p-4 rounded-xl border border-[var(--secondary)]/10">
+                    <div className="flex gap-3">
+                        <Shield className="w-5 h-5 text-[var(--secondary)] flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                            You're signing up as a Moil admin. You'll have access to manage all partners and licenses from the Moil Admin Dashboard.
                         </p>
                     </div>
                   </div>
@@ -374,9 +569,9 @@ function SignupContent() {
                   className="w-full h-12 text-base shadow-lg shadow-[var(--primary)]/20"
                   loading={loading}
                 >
-                  {loading ? (isInviteSignup ? 'Creating Account...' : 'Submitting Request...') : (
+                  {loading ? (isInviteSignup || isPartnerAdminSignup ? 'Creating Account...' : isMoilAdminSignup ? 'Creating Account...' : 'Submitting Request...') : (
                     <>
-                      <span>{isInviteSignup ? 'Create Account' : 'Request Access'}</span>
+                      <span>{isInviteSignup || isPartnerAdminSignup ? 'Create Account' : isMoilAdminSignup ? 'Create Account' : 'Request Access'}</span>
                       <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
                     </>
                   )}

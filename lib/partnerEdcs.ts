@@ -7,6 +7,16 @@ export interface EdcFeatures {
   businessTemplates: boolean;
 }
 
+export interface PartnerBranding {
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  textColor: string;
+  logoUrl: string;
+  logoInitial: string;
+  fontFamily: string;
+}
+
 export interface PartnerEdc {
   id: string;
   name: string;
@@ -16,13 +26,15 @@ export interface PartnerEdc {
   city: string;
   state: string;
   country: string;
-  primaryColor: string;
-  accentColor: string;
-  logo?: string;
-  logoInitial: string;
+  branding: PartnerBranding;
   supportEmail: string;
   licenseDuration: string;
   features: EdcFeatures;
+  // Legacy flat properties for backward compatibility
+  primaryColor?: string;
+  accentColor?: string;
+  logo?: string;
+  logoInitial?: string;
 }
 
 export const partnerEdcs: PartnerEdc[] = partnerEdcsData.partners as PartnerEdc[];

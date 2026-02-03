@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { sendPartnerAccessRequestEmail } from '@/lib/email';
-import crypto from 'crypto';
-
-// Generate a secure random token for approval links
-function generateApprovalToken(): string {
-  return crypto.randomBytes(32).toString('hex');
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +34,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use regular client - RLS allows any authenticated user to create partners
     const supabase = await createClient();
 
     // Check if partner with this domain already exists
@@ -51,16 +45,23 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingPartner) {
-      if (existingPartner.status === 'pending') {
-        return NextResponse.json(
-          { error: 'A request for this domain is already pending approval' },
-          { status: 409 }
-        );
-      } else if (existingPartner.status === 'active') {
-        return NextResponse.json(
-          { error: 'This domain is already registered. Please sign in instead.' },
-          { status: 409 }
-        );
+      if (existingPartner.status === 'active') {
+        // Partner already exists and is active - link the admin to it
+        if (userId) {
+          await supabase
+            .from('admins')
+            .update({ 
+              partner_id: existingPartner.id,
+              global_role: 'partner_admin'
+            })
+            .eq('id', userId);
+        }
+        return NextResponse.json({
+          success: true,
+          message: 'Your account has been linked to the existing partner',
+          partner: existingPartner,
+          userId: userId || null,
+        });
       } else if (existingPartner.status === 'suspended') {
         return NextResponse.json(
           { error: 'This domain has been suspended. Please contact support.' },
@@ -69,18 +70,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate a secure approval token
-    const approvalToken = generateApprovalToken();
-
-    // Create the partner with 'pending' status and approval token
-    // User is already created client-side via Supabase Auth
+    // Create the partner with 'active' status (admin creates their own partner)
     const { data: newPartner, error: partnerError } = await supabase
       .from('partners')
       .insert({
         name: organizationName.trim(),
         domain: domain,
-        status: 'pending',
-        approval_token: approvalToken,
+        status: 'active',
+        program_name: organizationName.trim(),
+        full_name: organizationName.trim(),
+        logo_initial: organizationName.trim().charAt(0).toUpperCase(),
       })
       .select()
       .single();
@@ -88,32 +87,30 @@ export async function POST(request: NextRequest) {
     if (partnerError) {
       console.error('Error creating partner:', partnerError);
       return NextResponse.json(
-        { error: 'Failed to create partner request' },
+        { error: 'Failed to create partner' },
         { status: 500 }
       );
     }
 
-    // Build the approval URL
-    const baseUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || 'https://partners.moilapp.com';
-    const approvalUrl = `${baseUrl}/grant-access/${approvalToken}`;
+    // Link the admin to the newly created partner
+    if (userId) {
+      const { error: adminError } = await supabase
+        .from('admins')
+        .update({ 
+          partner_id: newPartner.id,
+          global_role: 'partner_admin'
+        })
+        .eq('id', userId);
 
-    // Send notification email to Moil admins with direct approval link
-    const emailResult = await sendPartnerAccessRequestEmail({
-      organizationName: organizationName.trim(),
-      domain: domain,
-      requesterEmail: email,
-      requestedAt: new Date().toISOString(),
-      approvalUrl: approvalUrl,
-    });
-
-    if (!emailResult.success) {
-      console.error('Failed to send notification email:', emailResult.error);
-      // Don't fail the request if email fails - the partner is still created
+      if (adminError) {
+        console.error('Error linking admin to partner:', adminError);
+        // Don't fail - partner is created, admin can be linked later
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Partner access request submitted successfully',
+      message: 'Partner created successfully',
       partner: {
         id: newPartner.id,
         name: newPartner.name,
@@ -121,11 +118,10 @@ export async function POST(request: NextRequest) {
         status: newPartner.status,
       },
       userId: userId || null,
-      emailSent: emailResult.success,
     });
 
   } catch (error) {
-    console.error('Error in partner access request:', error);
+    console.error('Error in partner creation:', error);
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

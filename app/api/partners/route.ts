@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 // GET /api/partners - List all partners (Moil admins) or get current partner
 export async function GET(request: NextRequest) {
@@ -103,8 +103,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid domain format' }, { status: 400 });
     }
 
+    // Use admin client (secret key) for moil-admin operations
+    const supabaseAdmin = createAdminClient();
+
     // Check if domain already exists
-    const { data: existingPartner } = await supabase
+    const { data: existingPartner } = await supabaseAdmin
       .from('partners')
       .select('id')
       .eq('domain', body.domain.toLowerCase())
@@ -114,8 +117,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A partner with this domain already exists' }, { status: 400 });
     }
 
-    // Create partner (simplified: name + domain only)
-    const { data: partner, error: createError } = await supabase
+    // Create partner using admin client (moil-admin uses secret key)
+    const { data: partner, error: createError } = await supabaseAdmin
       .from('partners')
       .insert({
         name: body.name.trim(),
@@ -130,8 +133,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create partner' }, { status: 500 });
     }
 
-    // Log activity
-    await supabase.from('activity_logs').insert({
+    // Log activity using admin client
+    await supabaseAdmin.from('activity_logs').insert({
       team_id: null,
       admin_id: user.id,
       partner_id: partner.id,

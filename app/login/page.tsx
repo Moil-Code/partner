@@ -101,7 +101,7 @@ function LoginContent() {
         return;
       }
 
-      // For partner_admin, verify they have an active partner
+      // For partner_admin, verify they have an active partner (moil_admin doesn't need partner_id)
       if (adminData.global_role === 'partner_admin' && !adminData.partner_id) {
         await supabase.auth.signOut();
         toast({
@@ -112,6 +112,8 @@ function LoginContent() {
         setLoading(false);
         return;
       }
+      
+      // moil_admin accounts don't need a partner_id - they manage all partners
 
       toast({
         title: "Welcome back!",
@@ -125,8 +127,25 @@ function LoginContent() {
       if (redirectUrl) {
         router.push(redirectUrl);
       } else if (adminData.global_role === 'moil_admin') {
-        router.push('/moil-admin');
+        router.push('/moil-admin/dashboard');
       } else {
+        // For partner admins, check if brand identity is set
+        if (adminData.partner_id) {
+          const { data: partnerData } = await supabase
+            .from('partners')
+            .select('primary_color, logo_url')
+            .eq('id', adminData.partner_id)
+            .single();
+
+          // If no custom branding set (still using default), redirect to setup
+          const hasCustomBranding = partnerData && 
+            (partnerData.primary_color !== '#6366F1' || partnerData.logo_url);
+          
+          if (!hasCustomBranding) {
+            router.push('/admin/setup-branding');
+            return;
+          }
+        }
         router.push('/admin/dashboard');
       }
     } catch (err) {

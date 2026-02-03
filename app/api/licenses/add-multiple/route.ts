@@ -26,10 +26,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify user is an admin
+    // Verify user is an admin and get partner info
     const { data: adminData, error: adminError } = await supabase
       .from('admins')
-      .select('*')
+      .select('*, partner:partners(id, name)')
       .eq('id', user.id)
       .single();
 
@@ -39,6 +39,11 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
+
+    // Get partner name for activation URL
+    const partnerInfo = adminData.partner as { id: string; name: string } | null;
+    const partnerName = partnerInfo?.name || 'moil-partners';
+    const orgSlug = partnerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
     // Get user's team membership and team info
     const { data: teamMember } = await supabase
@@ -143,11 +148,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Prepare batch email data
+    // Prepare batch email data with dynamic partner org name
     const emailBatch = (insertedLicenses || []).map(license => ({
       email: license.email,
       licenseId: license.id,
-      activationUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://business.moilapp.com'}/register?licenseId=${license.id}&ref=moilPartners&org=moil-partners`,
+      activationUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://business.moilapp.com'}/register?licenseId=${license.id}&ref=moilPartners&org=${orgSlug}`,
     }));
 
     // Send batch emails
