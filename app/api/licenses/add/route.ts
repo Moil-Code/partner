@@ -26,10 +26,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify user is an admin and get team info
+    // Verify user is an admin and get team info with full partner branding
     const { data: adminData, error: adminError } = await supabase
       .from('admins')
-      .select('*, partner:partners(id, name)')
+      .select('*, partner:partners(id, name, program_name, logo_url, logo_initial, primary_color, support_email)')
       .eq('id', user.id)
       .single();
 
@@ -40,11 +40,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get partner name for activation URL
-    const partnerInfo = adminData.partner as { id: string; name: string } | null;
+    // Get partner info for activation URL and email branding
+    const partnerInfo = adminData.partner as { 
+      id: string; 
+      name: string; 
+      program_name?: string;
+      logo_url?: string;
+      logo_initial?: string;
+      primary_color?: string;
+      support_email?: string;
+    } | null;
     const partnerName = partnerInfo?.name || 'moil-partners';
     // Create URL-safe org name
     const orgSlug = partnerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    
+    // Build EDC info for email from partner data
+    const edcInfo = partnerInfo ? {
+      programName: partnerInfo.program_name || partnerInfo.name || 'Moil Partners',
+      fullName: partnerInfo.name || 'Moil Partners',
+      logo: partnerInfo.logo_url || 'https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png',
+      logoInitial: partnerInfo.logo_initial || partnerInfo.name?.charAt(0) || 'M',
+      primaryColor: partnerInfo.primary_color || '#5843BE',
+      supportEmail: partnerInfo.support_email || 'support@moilapp.com',
+      licenseDuration: '12 months',
+    } : undefined;
 
     // Get user's team membership and team info
     const { data: teamMember } = await supabase
@@ -131,6 +150,7 @@ export async function POST(request: Request) {
       email: license.email,
       activationUrl,
       adminName: `${adminData.first_name} ${adminData.last_name}`,
+      edc: edcInfo,
     });
 
     // Update message_id and email_status based on result

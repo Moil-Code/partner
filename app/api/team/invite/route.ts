@@ -120,16 +120,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 });
     }
 
-    // Get inviter's name
+    // Get inviter's name and partner branding info
     const { data: inviterData } = await supabase
       .from('admins')
-      .select('first_name, last_name')
+      .select('first_name, last_name, partner:partners(id, name, program_name, logo_url, logo_initial, primary_color, support_email)')
       .eq('id', user.id)
       .single();
 
     const inviterName = inviterData 
       ? `${inviterData.first_name} ${inviterData.last_name}` 
       : 'A team member';
+
+    // Build EDC info for email from partner data
+    const partnerInfo = inviterData?.partner as unknown as { 
+      id: string; 
+      name: string; 
+      program_name?: string;
+      logo_url?: string;
+      logo_initial?: string;
+      primary_color?: string;
+      support_email?: string;
+    } | null;
+    
+    const edcInfo = partnerInfo ? {
+      programName: partnerInfo.program_name || partnerInfo.name || 'Moil Partners',
+      fullName: partnerInfo.name || 'Moil Partners',
+      logo: partnerInfo.logo_url || 'https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png',
+      logoInitial: partnerInfo.logo_initial || partnerInfo.name?.charAt(0) || 'M',
+      primaryColor: partnerInfo.primary_color || '#5843BE',
+      supportEmail: partnerInfo.support_email || 'support@moilapp.com',
+      licenseDuration: '12 months',
+    } : undefined;
 
     // Send invitation email
     const baseUrl = process.env.NEXT_PUBLIC_INVITE_URL || 'https://partners.moilapp.com';
@@ -144,6 +165,7 @@ export async function POST(request: Request) {
       inviteUrl,
       signupUrl,
       role,
+      edc: edcInfo,
     });
 
     if (!emailResult.success) {

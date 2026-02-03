@@ -48,8 +48,43 @@ export function getEdcByEmail(email: string): PartnerEdc | undefined {
 }
 
 /**
+ * Default Moil Partners EDC configuration
+ */
+const DEFAULT_MOIL_EDC: PartnerEdc = {
+  id: 'moil-default',
+  name: 'Moil',
+  fullName: 'Moil Partners',
+  programName: 'Moil Partners',
+  domain: 'moilapp.com',
+  city: 'Austin',
+  state: 'TX',
+  country: 'USA',
+  branding: {
+    primaryColor: '#5843BE',
+    secondaryColor: '#FF6633',
+    accentColor: '#10B981',
+    textColor: '#0F172A',
+    logoUrl: 'https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png',
+    logoInitial: 'M',
+    fontFamily: 'Interstate, sans-serif',
+  },
+  supportEmail: 'support@moilapp.com',
+  licenseDuration: '12 months',
+  features: {
+    jobPosts: 10,
+    aiCoach: true,
+    marketResearch: true,
+    businessTemplates: true,
+  },
+  primaryColor: '#5843BE',
+  accentColor: '#10B981',
+  logo: 'https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png',
+  logoInitial: 'M',
+};
+
+/**
  * Get the default EDC (Moil Partners)
  */
 export function getDefaultEdc(): PartnerEdc {
-  return partnerEdcs[0];
+  return partnerEdcs[0] || DEFAULT_MOIL_EDC;
 }
