@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast/use-toast';
 import Logo from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { useAuthStore, usePartnerStore, useTeamStore, useUIStore } from '@/lib/stores';
 import { 
   Building2, 
   TrendingUp, 
@@ -62,174 +63,40 @@ type TabType = 'overview' | 'partners' | 'teams';
 export default function MoilAdminDashboard() {
   const router = useRouter();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [adminEmail, setAdminEmail] = useState('');
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  
+  // Zustand stores
+  const { admin, isLoading: authLoading, isMoilAdmin, fetchAuth } = useAuthStore();
+  const { partners, stats, isLoading: partnersLoading, fetchPartners, updatePartnerStatus, invalidateAll: invalidatePartners } = usePartnerStore();
+  const { teams, isLoading: teamsLoading, fetchTeams } = useTeamStore();
+  const { moilAdminActiveTab: activeTab, moilAdminSearchQuery: searchQuery, setMoilAdminActiveTab: setActiveTab, setMoilAdminSearchQuery: setSearchQuery } = useUIStore();
+  
+  const [updatingStatus, setUpdatingStatus] = React.useState<string | null>(null);
 
+  // Fetch auth and data on mount
   useEffect(() => {
-    checkAuthorization();
-  }, []);
+    fetchAuth();
+  }, [fetchAuth]);
 
-  const checkAuthorization = async () => {
-    try {
-      const supabase = createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.push('/login');
-        return;
-      }
-
-      // Check if user is Moil admin (@moilapp.com)
-      const { data: admin, error: adminError } = await supabase
-        .from('admins')
-        .select('email, global_role')
-        .eq('id', user.id)
-        .single();
-
-      if (adminError || !admin) {
-        toast({
-          title: 'Access Denied',
-          description: 'Admin account not found',
-          type: 'error',
-        });
-        router.push('/admin/dashboard');
-        return;
-      }
-
-      // Check if email is @moilapp.com
-      if (!admin.email.endsWith('@moilapp.com')) {
-        toast({
-          title: 'Access Denied',
-          description: 'This dashboard is only accessible to @moilapp.com accounts',
-          type: 'error',
-        });
-        router.push('/admin/dashboard');
-        return;
-      }
-
-      setAdminEmail(admin.email);
-      setIsAuthorized(true);
-      await fetchDashboardData();
-    } catch (error) {
-      console.error('Authorization error:', error);
-      router.push('/login');
-    } finally {
-      setLoading(false);
+  // Fetch data when authorized
+  useEffect(() => {
+    if (isMoilAdmin) {
+      fetchPartners();
+      fetchTeams();
     }
-  };
+  }, [isMoilAdmin, fetchPartners, fetchTeams]);
 
-  const fetchDashboardData = async () => {
-    try {
-      const supabase = createClient();
-
-      // Fetch all partners
-      const { data: partnersData, error: partnersError } = await supabase
-        .from('partners')
-        .select('id, name, domain, status, created_at')
-        .order('created_at', { ascending: false });
-
-      console.log('Partners fetch result:', { partnersData, partnersError });
-
-      if (partnersError) throw partnersError;
-      setPartners(partnersData || []);
-
-      // Fetch all teams
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('teams')
-        .select('id, name, domain, partner_id, created_at')
-        .order('created_at', { ascending: false });
-      
-      console.log('Teams fetch result:', { teamsData, teamsError });
-
-      if (!teamsError && teamsData) {
-        // Get partner names for each team
-        const partnerIds = [...new Set(teamsData.filter(t => t.partner_id).map(t => t.partner_id))];
-        let partnerMap: Record<string, string> = {};
-        
-        if (partnerIds.length > 0) {
-          const { data: partnerNames } = await supabase
-            .from('partners')
-            .select('id, name')
-            .in('id', partnerIds);
-          
-          if (partnerNames) {
-            partnerMap = partnerNames.reduce((acc: Record<string, string>, p) => {
-              acc[p.id] = p.name;
-              return acc;
-            }, {});
-          }
-        }
-
-        // Get license counts for each team
-        const teamIds = teamsData.map(t => t.id);
-        const { data: licenseCounts } = await supabase
-          .from('licenses')
-          .select('team_id')
-          .in('team_id', teamIds);
-
-        const licenseCountMap: Record<string, number> = {};
-        if (licenseCounts) {
-          licenseCounts.forEach((l: { team_id: string }) => {
-            licenseCountMap[l.team_id] = (licenseCountMap[l.team_id] || 0) + 1;
-          });
-        }
-
-        const teamsWithDetails = teamsData.map((team: any) => ({
-          id: team.id,
-          name: team.name,
-          domain: team.domain,
-          partner_id: team.partner_id,
-          partner_name: team.partner_id ? partnerMap[team.partner_id] || 'Unknown' : 'No Partner',
-          created_at: team.created_at,
-          license_count: licenseCountMap[team.id] || 0,
-        }));
-        setTeams(teamsWithDetails);
-      }
-
-      // Calculate stats
-      const totalPartners = partnersData?.length || 0;
-      const activePartners = partnersData?.filter(p => p.status === 'active').length || 0;
-      const pendingPartners = partnersData?.filter(p => p.status === 'pending').length || 0;
-
-      // Fetch license count
-      const { count: licenseCount } = await supabase
-        .from('licenses')
-        .select('id', { count: 'exact', head: true });
-
-      // Fetch team count
-      const { count: teamCount } = await supabase
-        .from('teams')
-        .select('id', { count: 'exact', head: true });
-
-      // Fetch admin count
-      const { count: adminCount } = await supabase
-        .from('admins')
-        .select('id', { count: 'exact', head: true });
-
-      setStats({
-        total_partners: totalPartners,
-        active_partners: activePartners,
-        pending_partners: pendingPartners,
-        total_licenses: licenseCount || 0,
-        total_teams: teamCount || 0,
-        total_admins: adminCount || 0,
-      });
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+  // Redirect if not authorized
+  useEffect(() => {
+    if (!authLoading && admin && !isMoilAdmin) {
       toast({
-        title: 'Error',
-        description: 'Failed to load dashboard data',
+        title: 'Access Denied',
+        description: 'This dashboard is only accessible to Moil admins',
         type: 'error',
       });
+      router.push('/admin/dashboard');
     }
-  };
+  }, [authLoading, admin, isMoilAdmin, router, toast]);
+
 
   const handleToggleStatus = async (partner: Partner) => {
     setUpdatingStatus(partner.id);
@@ -250,7 +117,8 @@ export default function MoilAdminDashboard() {
         type: 'success',
       });
 
-      await fetchDashboardData();
+      invalidatePartners();
+      fetchPartners();
     } catch (error) {
       console.error('Error updating partner status:', error);
       toast({
@@ -297,7 +165,8 @@ export default function MoilAdminDashboard() {
         type: 'success',
       });
 
-      await fetchDashboardData();
+      invalidatePartners();
+      fetchPartners();
     } catch (error) {
       console.error('Error approving partner:', error);
       toast({
@@ -329,7 +198,8 @@ export default function MoilAdminDashboard() {
         type: 'success',
       });
 
-      await fetchDashboardData();
+      invalidatePartners();
+      fetchPartners();
     } catch (error) {
       console.error('Error rejecting partner:', error);
       toast({
@@ -354,7 +224,7 @@ export default function MoilAdminDashboard() {
            p.domain.toLowerCase().includes(query);
   });
 
-  if (loading) {
+  if (authLoading || (isMoilAdmin && partnersLoading && partners.length === 0)) {
     return (
       <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
         <div className="text-center">
@@ -365,7 +235,7 @@ export default function MoilAdminDashboard() {
     );
   }
 
-  if (!isAuthorized) {
+  if (!isMoilAdmin) {
     return null;
   }
 
@@ -390,7 +260,7 @@ export default function MoilAdminDashboard() {
               <div className="hidden md:block h-8 w-[1px] bg-[var(--border)]" />
               
               <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <span className="bg-[var(--surface-subtle)] px-2 py-1 rounded-md border border-[var(--border)]">{adminEmail}</span>
+                <span className="bg-[var(--surface-subtle)] px-2 py-1 rounded-md border border-[var(--border)]">{admin?.email}</span>
               </div>
             </div>
 
@@ -747,17 +617,17 @@ export default function MoilAdminDashboard() {
                               variant="ghost"
                               size="sm"
                               onClick={() => router.push(`/moil-admin/partners/${partner.id}`)}
-                              title="View Partner"
+                              className="hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 focus:outline-none active:scale-95 transition-all"
                             >
-                              <Eye className="w-4 h-4" />
+                              View Details
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => router.push(`/moil-admin/licenses?partnerId=${partner.id}`)}
-                              title="Manage Licenses"
+                              className="hover:bg-[var(--secondary)]/10 hover:text-[var(--secondary)] focus:ring-2 focus:ring-[var(--secondary)]/20 focus:outline-none active:scale-95 transition-all"
                             >
-                              <Key className="w-4 h-4" />
+                              Manage Licenses
                             </Button>
                             {partner.status === 'pending' ? (
                               <>
@@ -766,18 +636,18 @@ export default function MoilAdminDashboard() {
                                   size="sm"
                                   onClick={() => handleRejectPartner(partner)}
                                   disabled={updatingStatus === partner.id}
-                                  className="text-[var(--error)]"
+                                  className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20 focus:ring-2 focus:ring-red-500/20 focus:outline-none active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  <XCircle className="w-4 h-4" />
+                                  Reject
                                 </Button>
                                 <Button
                                   variant="primary"
                                   size="sm"
                                   onClick={() => handleApprovePartner(partner)}
                                   disabled={updatingStatus === partner.id}
+                                  className="bg-green-600 hover:bg-green-700 text-white focus:ring-2 focus:ring-green-500/20 focus:outline-none active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Approve
+                                  Approve Partner
                                 </Button>
                               </>
                             ) : (
@@ -786,18 +656,12 @@ export default function MoilAdminDashboard() {
                                 size="sm"
                                 onClick={() => handleToggleStatus(partner)}
                                 disabled={updatingStatus === partner.id}
+                                className={partner.status === 'active' 
+                                  ? 'text-orange-600 border-orange-200 hover:bg-orange-50 hover:border-orange-300 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-900/20 focus:ring-2 focus:ring-orange-500/20 focus:outline-none active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+                                  : 'bg-green-600 hover:bg-green-700 text-white focus:ring-2 focus:ring-green-500/20 focus:outline-none active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+                                }
                               >
-                                {partner.status === 'active' ? (
-                                  <>
-                                    <XCircle className="w-4 h-4 mr-1" />
-                                    Suspend
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle className="w-4 h-4 mr-1" />
-                                    Activate
-                                  </>
-                                )}
+                                {partner.status === 'active' ? 'Suspend' : 'Activate'}
                               </Button>
                             )}
                           </div>

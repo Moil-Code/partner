@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Logo from '@/components/ui/Logo';
+import { useAuthStore, usePartnerStore } from '@/lib/stores';
 import { 
   ArrowLeft, 
   Building2, 
@@ -62,91 +62,36 @@ export default function PartnerViewPage() {
   const partnerId = params.partnerId as string;
   const { toast } = useToast();
 
-  const [loading, setLoading] = useState(true);
-  const [partner, setPartner] = useState<Partner | null>(null);
-  const [admins, setAdmins] = useState<Admin[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [totalLicenseCount, setTotalLicenseCount] = useState(0);
+  // Zustand stores
+  const { isLoading: authLoading, isMoilAdmin, fetchAuth } = useAuthStore();
+  const { partnerDetails, detailsLoading, fetchPartnerDetail } = usePartnerStore();
 
+  // Get cached partner detail
+  const partnerDetail = partnerDetails[partnerId];
+  const isLoading = detailsLoading[partnerId] || false;
+  const partner = partnerDetail?.partner || null;
+  const admins = partnerDetail?.admins || [];
+  const teams = partnerDetail?.teams || [];
+  const totalLicenseCount = partnerDetail?.totalLicenseCount || 0;
+
+  // Fetch auth on mount
   useEffect(() => {
-    const fetchPartnerData = async () => {
-      const supabase = createClient();
+    fetchAuth();
+  }, [fetchAuth]);
 
-      // Check if user is Moil admin
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
+  // Fetch partner detail when authorized
+  useEffect(() => {
+    if (isMoilAdmin && partnerId) {
+      fetchPartnerDetail(partnerId);
+    }
+  }, [isMoilAdmin, partnerId, fetchPartnerDetail]);
 
-      const { data: adminData } = await supabase
-        .from('admins')
-        .select('global_role')
-        .eq('id', user.id)
-        .single();
-
-      if (adminData?.global_role !== 'moil_admin') {
-        router.push('/admin/dashboard');
-        return;
-      }
-
-      // Fetch partner details
-      const { data: partnerData, error: partnerError } = await supabase
-        .from('partners')
-        .select('*')
-        .eq('id', partnerId)
-        .single();
-
-      if (partnerError || !partnerData) {
-        toast({
-          title: 'Error',
-          description: 'Partner not found',
-          type: 'error',
-        });
-        router.push('/moil-admin/dashboard');
-        return;
-      }
-
-      setPartner(partnerData);
-
-      // Fetch admins for this partner
-      const { data: adminsData } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('partner_id', partnerId)
-        .order('created_at', { ascending: true });
-
-      setAdmins(adminsData || []);
-
-      // Fetch teams for this partner
-      const { data: teamsData } = await supabase
-        .from('teams')
-        .select('*')
-        .eq('partner_id', partnerId)
-        .order('created_at', { ascending: true });
-
-      // Fetch license counts for each team
-      let totalLicenses = 0;
-      const teamsWithLicenses = await Promise.all(
-        (teamsData || []).map(async (team) => {
-          const { count } = await supabase
-            .from('licenses')
-            .select('*', { count: 'exact', head: true })
-            .eq('team_id', team.id);
-          const licenseCount = count || 0;
-          totalLicenses += licenseCount;
-          return { ...team, license_count: licenseCount };
-        })
-      );
-
-      setTeams(teamsWithLicenses);
-      setTotalLicenseCount(totalLicenses);
-
-      setLoading(false);
-    };
-
-    fetchPartnerData();
-  }, [partnerId, router, toast]);
+  // Redirect if not authorized
+  useEffect(() => {
+    if (!authLoading && !isMoilAdmin) {
+      router.push('/admin/dashboard');
+    }
+  }, [authLoading, isMoilAdmin, router]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -164,7 +109,19 @@ export default function PartnerViewPage() {
     return '';
   };
 
-  if (loading) {
+  // Redirect if partner not found after loading
+  useEffect(() => {
+    if (isMoilAdmin && !isLoading && !partner && partnerDetail !== undefined) {
+      toast({
+        title: 'Error',
+        description: 'Partner not found',
+        type: 'error',
+      });
+      router.push('/moil-admin/dashboard');
+    }
+  }, [isMoilAdmin, isLoading, partner, partnerDetail, router, toast]);
+
+  if (authLoading || !isMoilAdmin || isLoading || !partner) {
     return (
       <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
         <div className="text-center">
@@ -173,10 +130,6 @@ export default function PartnerViewPage() {
         </div>
       </div>
     );
-  }
-
-  if (!partner) {
-    return null;
   }
 
   const hasAdmin = admins.length > 0;
@@ -199,11 +152,11 @@ export default function PartnerViewPage() {
       <div className="container mx-auto px-6 py-8 max-w-4xl">
         <Button
           variant="ghost"
-          onClick={() => router.push('/moil-admin/dashboard')}
+          onClick={() => router.back()}
           className="mb-6"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
+          Back
         </Button>
 
         {/* Partner Header Card */}

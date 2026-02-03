@@ -34,6 +34,8 @@ function SignupContent() {
   const [loading, setLoading] = useState(false);
   const [extractedDomain, setExtractedDomain] = useState('');
   const [partnerInfo, setPartnerInfo] = useState<{ name: string; domain: string } | null>(null);
+  const [existingPartnerForDomain, setExistingPartnerForDomain] = useState<{ name: string; domain: string } | null>(null);
+  const [checkingDomain, setCheckingDomain] = useState(false);
   
   // Check if this is a partner admin signup (from Moil admin created link)
   const isPartnerAdminSignup = !!partnerId;
@@ -63,6 +65,41 @@ function SignupContent() {
     }
   }, [partnerId]);
 
+  // Check if domain already has a partner (for regular signup flow)
+  React.useEffect(() => {
+    // Only check for regular signup (not partner admin signup, not invite signup, not moil admin)
+    if (isPartnerAdminSignup || isInviteSignup || !extractedDomain || extractedDomain === 'moilapp.com') {
+      setExistingPartnerForDomain(null);
+      return;
+    }
+
+    const checkDomainPartner = async () => {
+      setCheckingDomain(true);
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('partners')
+          .select('name, domain')
+          .eq('domain', extractedDomain)
+          .single();
+        
+        if (data) {
+          setExistingPartnerForDomain(data);
+        } else {
+          setExistingPartnerForDomain(null);
+        }
+      } catch {
+        setExistingPartnerForDomain(null);
+      } finally {
+        setCheckingDomain(false);
+      }
+    };
+
+    // Debounce the check
+    const timeoutId = setTimeout(checkDomainPartner, 500);
+    return () => clearTimeout(timeoutId);
+  }, [extractedDomain, isPartnerAdminSignup, isInviteSignup]);
+
   // Extract domain from email
   const handleEmailChange = (value: string) => {
     setEmail(value);
@@ -71,6 +108,7 @@ function SignupContent() {
       setExtractedDomain(domain || '');
     } else {
       setExtractedDomain('');
+      setExistingPartnerForDomain(null);
     }
   };
 
@@ -94,6 +132,31 @@ function SignupContent() {
       toast({
         title: "Weak Password",
         description: "Password must be at least 8 characters long",
+        type: "error"
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Validate email domain for partner admin signup
+    if (isPartnerAdminSignup && partnerInfo) {
+      const emailDomain = extractedDomain;
+      if (emailDomain !== partnerInfo.domain) {
+        toast({
+          title: "Invalid Email Domain",
+          description: `You must use an email address with the domain @${partnerInfo.domain} to sign up for ${partnerInfo.name}`,
+          type: "error"
+        });
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Block signup if domain already has a partner (for regular signup flow)
+    if (!isPartnerAdminSignup && !isInviteSignup && !isMoilAdminSignup && existingPartnerForDomain) {
+      toast({
+        title: "Domain Already Registered",
+        description: `The domain @${existingPartnerForDomain.domain} is already registered to ${existingPartnerForDomain.name}. Please contact your organization's admin to be invited to the team.`,
         type: "error"
       });
       setLoading(false);
@@ -480,6 +543,11 @@ function SignupContent() {
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                     {isInviteSignup ? 'Work Email' : 'Email Address'}
+                    {isPartnerAdminSignup && partnerInfo && (
+                      <span className="ml-2 text-xs text-[var(--accent)] font-normal">
+                        (must be @{partnerInfo.domain})
+                      </span>
+                    )}
                   </label>
                   <div className="relative group">
                     <input 
@@ -487,17 +555,44 @@ function SignupContent() {
                       value={email}
                       onChange={(e) => handleEmailChange(e.target.value)}
                       className="w-full px-4 py-3 pl-11 bg-[var(--surface-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all text-[var(--text-primary)] placeholder-[var(--text-tertiary)]"
-                      placeholder="name@company.com"
+                      placeholder={isPartnerAdminSignup && partnerInfo ? `name@${partnerInfo.domain}` : "name@company.com"}
                       required
                       disabled={loading}
                     />
                     <Mail className="w-5 h-5 text-[var(--text-tertiary)] absolute left-3.5 top-3.5 group-focus-within:text-[var(--primary)] transition-colors" />
                   </div>
-                  {!isInviteSignup && extractedDomain && (
-                    <p className="mt-2 text-xs text-[var(--text-secondary)] flex items-center gap-1.5 bg-[var(--surface-subtle)] px-3 py-2 rounded-lg border border-[var(--border)]">
-                      <span className="font-medium">Domain:</span>
-                      <code className="text-[var(--secondary)] font-mono bg-[var(--secondary)]/5 px-2 py-0.5 rounded">{extractedDomain}</code>
+                  {isPartnerAdminSignup && partnerInfo && extractedDomain && (
+                    <p className={`mt-2 text-xs flex items-center gap-1.5 px-3 py-2 rounded-lg border ${
+                      extractedDomain === partnerInfo.domain 
+                        ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+                        : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                    }`}>
+                      <span className="font-medium">
+                        {extractedDomain === partnerInfo.domain ? '✓ Valid domain' : '✗ Invalid domain'}
+                      </span>
+                      <code className="font-mono px-2 py-0.5 rounded bg-black/5 dark:bg-white/5">{extractedDomain}</code>
                     </p>
+                  )}
+                  {!isInviteSignup && !isPartnerAdminSignup && extractedDomain && (
+                    checkingDomain ? (
+                      <p className="mt-2 text-xs text-[var(--text-secondary)] flex items-center gap-1.5 bg-[var(--surface-subtle)] px-3 py-2 rounded-lg border border-[var(--border)]">
+                        <span className="animate-pulse">Checking domain...</span>
+                      </p>
+                    ) : existingPartnerForDomain ? (
+                      <div className="mt-2 text-xs bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded-lg">
+                        <p className="font-medium flex items-center gap-1.5">
+                          <span>✗</span> Domain already registered to <strong>{existingPartnerForDomain.name}</strong>
+                        </p>
+                        <p className="mt-1 text-red-600 dark:text-red-300">
+                          Contact your organization's admin to be invited to the team.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-[var(--text-secondary)] flex items-center gap-1.5 bg-[var(--surface-subtle)] px-3 py-2 rounded-lg border border-[var(--border)]">
+                        <span className="font-medium">Domain:</span>
+                        <code className="text-[var(--secondary)] font-mono bg-[var(--secondary)]/5 px-2 py-0.5 rounded">{extractedDomain}</code>
+                      </p>
+                    )
                   )}
                 </div>
 

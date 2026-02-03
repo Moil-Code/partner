@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast/use-toast';
 import Logo from '@/components/ui/Logo';
+import { useAuthStore, useTeamStore } from '@/lib/stores';
 import { 
   ArrowLeft,
   Building2,
@@ -90,175 +90,81 @@ export default function TeamViewPage() {
   const teamId = params.teamId as string;
   const { toast } = useToast();
   
-  const [loading, setLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [team, setTeam] = useState<Team | null>(null);
-  const [partner, setPartner] = useState<Partner | null>(null);
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [licenses, setLicenses] = useState<License[]>([]);
-  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
-  const [stats, setStats] = useState<Stats>({
-    totalLicenses: 0,
-    activatedLicenses: 0,
-    pendingLicenses: 0,
-    teamMembers: 0,
-    pendingInvitations: 0,
-  });
   const [showAddLicense, setShowAddLicense] = useState(false);
   const [newLicenseEmail, setNewLicenseEmail] = useState('');
   const [addingLicense, setAddingLicense] = useState(false);
 
+  // Zustand stores
+  const { isLoading: authLoading, isMoilAdmin, fetchAuth } = useAuthStore();
+  const { teamDetails, detailsLoading, fetchTeamDetail, invalidateTeam } = useTeamStore();
+
+  // Get cached team detail
+  const teamDetail = teamDetails[teamId];
+  const dataLoading = detailsLoading[teamId] || false;
+  const team = teamDetail?.team || null;
+  const partner = teamDetail?.partner || null;
+  const rawMembers = teamDetail?.members || [];
+  const licenses = teamDetail?.licenses || [];
+  const invitations = teamDetail?.invitations || [];
+
+  // Format members data
+  const members = useMemo(() => {
+    return rawMembers.map((m: any) => ({
+      id: m.id,
+      admin_id: m.admin_id,
+      role: m.role,
+      joined_at: m.joined_at,
+      admin: {
+        email: m.admin?.email || '',
+        first_name: m.admin?.first_name || '',
+        last_name: m.admin?.last_name || '',
+      }
+    }));
+  }, [rawMembers]);
+
+  // Calculate stats from cached data
+  const stats = useMemo(() => {
+    const totalLicenses = licenses.length;
+    const activatedLicenses = licenses.filter((l: any) => l.is_activated).length;
+    return {
+      totalLicenses,
+      activatedLicenses,
+      pendingLicenses: totalLicenses - activatedLicenses,
+      teamMembers: members.length,
+      pendingInvitations: invitations.length,
+    };
+  }, [licenses, members, invitations]);
+
+  // Fetch auth on mount
   useEffect(() => {
-    if (teamId) {
-      checkAuthorizationAndFetch();
+    fetchAuth();
+  }, [fetchAuth]);
+
+  // Fetch team detail when authorized
+  useEffect(() => {
+    if (isMoilAdmin && teamId) {
+      fetchTeamDetail(teamId);
     }
-  }, [teamId]);
+  }, [isMoilAdmin, teamId, fetchTeamDetail]);
 
-  const checkAuthorizationAndFetch = async () => {
-    try {
-      const supabase = createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.push('/login');
-        return;
-      }
-
-      // Check if user is Moil admin
-      const { data: admin, error: adminError } = await supabase
-        .from('admins')
-        .select('email, global_role')
-        .eq('id', user.id)
-        .single();
-
-      if (adminError || !admin || !admin.email.endsWith('@moilapp.com')) {
-        toast({
-          title: 'Access Denied',
-          description: 'This page is only accessible to Moil admins',
-          type: 'error',
-        });
-        router.push('/admin/dashboard');
-        return;
-      }
-
-      setIsAuthorized(true);
-      await fetchTeamData();
-    } catch (error) {
-      console.error('Authorization error:', error);
-      router.push('/login');
-    } finally {
-      setLoading(false);
+  // Redirect if not authorized
+  useEffect(() => {
+    if (!authLoading && !isMoilAdmin) {
+      router.push('/admin/dashboard');
     }
-  };
+  }, [authLoading, isMoilAdmin, router]);
 
-  const fetchTeamData = async () => {
-    try {
-      const supabase = createClient();
-
-      // Fetch team
-      const { data: teamData, error: teamError } = await supabase
-        .from('teams')
-        .select('*')
-        .eq('id', teamId)
-        .single();
-    
-      console.log(teamData);
-
-      if (teamError || !teamData) {
-        toast({
-          title: 'Error',
-          description: 'Team not found',
-          type: 'error',
-        });
-        router.push('/moil-admin/dashboard');
-        return;
-      }
-
-      setTeam(teamData);
-
-      // Fetch partner
-      if (teamData.partner_id) {
-        const { data: partnerData } = await supabase
-          .from('partners')
-          .select('id, name, domain, primary_color, logo_url')
-          .eq('id', teamData.partner_id)
-          .single();
-
-        if (partnerData) {
-          setPartner(partnerData);
-        }
-      }
-
-      // Fetch team members with admin info
-      const { data: membersData } = await supabase
-        .from('team_members')
-        .select(`
-          id,
-          admin_id,
-          role,
-          joined_at,
-          admins (email, first_name, last_name)
-        `)
-        .eq('team_id', teamId);
-
-      if (membersData) {
-        const formattedMembers = membersData.map((m: any) => ({
-          id: m.id,
-          admin_id: m.admin_id,
-          role: m.role,
-          joined_at: m.joined_at,
-          admin: {
-            email: m.admins?.email || '',
-            first_name: m.admins?.first_name || '',
-            last_name: m.admins?.last_name || '',
-          }
-        }));
-        setMembers(formattedMembers);
-      }
-
-      // Fetch licenses
-      const { data: licensesData } = await supabase
-        .from('licenses')
-        .select('id, email, business_name, is_activated, activated_at, created_at')
-        .eq('team_id', teamId)
-        .order('created_at', { ascending: false });
-
-      if (licensesData) {
-        setLicenses(licensesData);
-      }
-
-      // Fetch pending invitations
-      const { data: invitationsData } = await supabase
-        .from('team_invitations')
-        .select('id, email, role, status, token, expires_at, created_at')
-        .eq('team_id', teamId)
-        .eq('status', 'pending');
-
-      if (invitationsData) {
-        setInvitations(invitationsData);
-      }
-
-      // Calculate stats
-      const totalLicenses = licensesData?.length || 0;
-      const activatedLicenses = licensesData?.filter((l: License) => l.is_activated).length || 0;
-      
-      setStats({
-        totalLicenses,
-        activatedLicenses,
-        pendingLicenses: totalLicenses - activatedLicenses,
-        teamMembers: membersData?.length || 0,
-        pendingInvitations: invitationsData?.length || 0,
-      });
-
-    } catch (error) {
-      console.error('Error fetching team data:', error);
+  // Redirect if team not found after loading
+  useEffect(() => {
+    if (isMoilAdmin && !dataLoading && !team && teamDetail !== undefined) {
       toast({
         title: 'Error',
-        description: 'Failed to load team data',
+        description: 'Team not found',
         type: 'error',
       });
+      router.push('/moil-admin/dashboard');
     }
-  };
+  }, [isMoilAdmin, dataLoading, team, teamDetail, router, toast]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -317,7 +223,8 @@ export default function TeamViewPage() {
 
       setNewLicenseEmail('');
       setShowAddLicense(false);
-      await fetchTeamData();
+      invalidateTeam(teamId);
+      fetchTeamDetail(teamId);
     } catch (error) {
       console.error('Error adding license:', error);
       toast({
@@ -330,7 +237,7 @@ export default function TeamViewPage() {
     }
   };
 
-  if (loading) {
+  if (authLoading || !isMoilAdmin || dataLoading || !team) {
     return (
       <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
         <div className="text-center">
@@ -341,7 +248,7 @@ export default function TeamViewPage() {
     );
   }
 
-  if (!isAuthorized || !team) {
+  if (!isMoilAdmin) {
     return null;
   }
 
@@ -361,9 +268,9 @@ export default function TeamViewPage() {
                 <h1 className="text-xl font-bold text-[var(--text-primary)]">{team.name}</h1>
               </div>
             </div>
-            <Button variant="ghost" onClick={() => router.push('/moil-admin/dashboard')}>
+            <Button variant="ghost" onClick={() => router.back()}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+              Back
             </Button>
           </div>
         </div>

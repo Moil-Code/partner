@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast/toast-context";
 import { ThemeProvider } from "@/components/ui/theme-provider";
+import { SWRProvider } from "@/lib/providers/SWRProvider";
 
 export const metadata: Metadata = {
   title: "Moil Partners - Business License Management",
@@ -46,11 +47,13 @@ export default function RootLayout({
         className="antialiased"
         style={{ fontFamily: "'Interstate', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif" }}
       >
-        <ThemeProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
-        </ThemeProvider>
+        <SWRProvider>
+          <ThemeProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </ThemeProvider>
+        </SWRProvider>
       </body>
     </html>
   );
