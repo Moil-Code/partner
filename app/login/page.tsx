@@ -72,7 +72,7 @@ function LoginContent() {
       // Check the user's admin record in the database for proper role verification
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
-        .select('id, global_role, partner_id')
+        .select('id, global_role, partner_id, partners(id, name, status)')
         .eq('id', data.user.id)
         .single();
 
@@ -102,15 +102,42 @@ function LoginContent() {
       }
 
       // For partner_admin, verify they have an active partner (moil_admin doesn't need partner_id)
-      if (adminData.global_role === 'partner_admin' && !adminData.partner_id) {
-        await supabase.auth.signOut();
-        toast({
-          title: "Access Pending",
-          description: "Your partner organization is pending approval. Please wait for admin confirmation.",
-          type: "error"
-        });
-        setLoading(false);
-        return;
+      if (adminData.global_role === 'partner_admin') {
+        if (!adminData.partner_id) {
+          await supabase.auth.signOut();
+          toast({
+            title: "Access Pending",
+            description: "Your partner organization is pending approval. Please wait for admin confirmation.",
+            type: "warning"
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Check if partner status is pending
+        const partner = (adminData as any).partners;
+        if (partner && partner.status === 'pending') {
+          await supabase.auth.signOut();
+          toast({
+            title: "Access Pending",
+            description: `Your organization "${partner.name}" is pending approval by Moil administrators. You'll receive an email once approved.`,
+            type: "warning"
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Check if partner is suspended
+        if (partner && partner.status === 'suspended') {
+          await supabase.auth.signOut();
+          toast({
+            title: "Access Suspended",
+            description: `Your organization "${partner.name}" has been suspended. Please contact support for assistance.`,
+            type: "error"
+          });
+          setLoading(false);
+          return;
+        }
       }
       
       // moil_admin accounts don't need a partner_id - they manage all partners
@@ -129,19 +156,22 @@ function LoginContent() {
       } else if (adminData.global_role === 'moil_admin') {
         router.push('/moil-admin/dashboard');
       } else {
-        // For partner admins, check if brand identity is set
+        // For partner admins, check if they need to set up branding for the first time
         if (adminData.partner_id) {
           const { data: partnerData } = await supabase
             .from('partners')
-            .select('primary_color, logo_url')
+            .select('primary_color, logo_url, secondary_color')
             .eq('id', adminData.partner_id)
             .single();
 
-          // If no custom branding set (still using default), redirect to setup
-          const hasCustomBranding = partnerData && 
-            (partnerData.primary_color !== '#6366F1' || partnerData.logo_url);
+          // Only redirect to branding setup if branding has NEVER been set
+          // (all fields are null or empty, not just using defaults)
+          const brandingNeverSet = partnerData && 
+            !partnerData.primary_color && 
+            !partnerData.secondary_color && 
+            !partnerData.logo_url;
           
-          if (!hasCustomBranding) {
+          if (brandingNeverSet) {
             router.push('/admin/setup-branding');
             return;
           }

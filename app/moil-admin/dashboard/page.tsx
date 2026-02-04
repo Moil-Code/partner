@@ -134,34 +134,20 @@ export default function MoilAdminDashboard() {
   const handleApprovePartner = async (partner: Partner) => {
     setUpdatingStatus(partner.id);
     try {
-      const supabase = createClient();
-      
-      // 1. Update partner status to active
-      const { error: partnerError } = await supabase
-        .from('partners')
-        .update({ status: 'active' })
-        .eq('id', partner.id);
+      // Call API to approve partner and send email notifications
+      const response = await fetch(`/api/partners/${partner.id}/approve`, {
+        method: 'POST',
+      });
 
-      if (partnerError) throw partnerError;
+      const data = await response.json();
 
-      // 2. Update all admins with matching email domain to link them to this partner
-      // and set their role to partner_admin
-      const { error: adminError } = await supabase
-        .from('admins')
-        .update({ 
-          partner_id: partner.id,
-          global_role: 'partner_admin'
-        })
-        .ilike('email', `%@${partner.domain}`);
-
-      if (adminError) {
-        console.error('Error updating admins:', adminError);
-        // Don't fail - partner is already approved
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Failed to approve partner');
       }
 
       toast({
         title: 'Partner Approved!',
-        description: `${partner.name} has been approved. Users from ${partner.domain} can now sign in.`,
+        description: `${partner.name} has been approved. Approval emails sent to admins from ${partner.domain}.`,
         type: 'success',
       });
 
@@ -171,7 +157,7 @@ export default function MoilAdminDashboard() {
       console.error('Error approving partner:', error);
       toast({
         title: 'Error',
-        description: 'Failed to approve partner',
+        description: error instanceof Error ? error.message : 'Failed to approve partner',
         type: 'error',
       });
     } finally {

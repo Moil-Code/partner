@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { LicenseActivationEmail } from '../emails/license-activation';
 import { TeamInvitationEmail } from '../emails/team-invitation';
 import { PartnerAccessRequestEmail } from '../emails/partner-access-request';
+import { PartnerApprovedEmail } from '../emails/partner-approved';
 import { getEdcByEmail, getDefaultEdc, type PartnerEdc } from './partnerEdcs';
 import { getLogoUrl } from './config';
 
@@ -478,10 +479,8 @@ export async function getBatchEmailStatuses(messageIds: string[]) {
 
 // Moil admin emails to notify for partner access requests
 const MOIL_ADMIN_EMAILS = [
-  'andres@moilapp.com',
-  'cs@moilapp.com',
-  'partner@moilapp.com',
   'taiwo@moilapp.com',
+  'andre@moilapp.com',
   'jacob@moilapp.com',
 ];
 
@@ -531,6 +530,53 @@ export async function sendPartnerAccessRequestEmail(data: PartnerAccessRequestDa
     return { success: true, messageId: result.data?.id };
   } catch (error) {
     console.error('Error sending partner access request email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// ============================================
+// PARTNER APPROVAL EMAIL
+// ============================================
+
+export interface PartnerApprovedData {
+  organizationName: string;
+  adminEmail: string;
+}
+
+export async function sendPartnerApprovedEmail(data: PartnerApprovedData) {
+  try {
+    if (!process.env.RESEND_API) {
+      throw new Error('RESEND_API environment variable is not configured.');
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || 'https://partners.moilapp.com';
+    const loginUrl = `${baseUrl}/login`;
+    const dashboardUrl = `${baseUrl}/admin/dashboard`;
+
+    // Send email to the partner admin using queue to respect rate limits
+    const result = await emailQueue.add(async () => {
+      return resend.emails.send({
+        from: FROM_EMAIL,
+        to: data.adminEmail,
+        subject: `🎉 Your Partner Account Has Been Approved!`,
+        react: PartnerApprovedEmail({
+          organizationName: data.organizationName,
+          adminEmail: data.adminEmail,
+          loginUrl: loginUrl,
+          dashboardUrl: dashboardUrl,
+        }),
+      });
+    });
+
+    if (result.error) {
+      console.error('Resend API error:', result.error);
+      return { success: false, error: result.error.message };
+    }
+
+    console.log('Partner approval email sent to:', data.adminEmail, result.data?.id);
+    return { success: true, messageId: result.data?.id };
+  } catch (error) {
+    console.error('Error sending partner approval email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

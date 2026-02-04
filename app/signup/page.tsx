@@ -412,7 +412,7 @@ function SignupContent() {
 
         toast({
           title: "Account Created!",
-          description: "Your partner account has been created. You can now sign in and set up your branding.",
+          description: "Your partner access request has been submitted and is pending approval. You'll receive an email once approved.",
           type: "success"
         });
 

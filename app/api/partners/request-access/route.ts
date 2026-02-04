@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { sendPartnerAccessRequestEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,11 +35,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use regular client - RLS allows any authenticated user to create partners
+    // Use admin client to bypass RLS for partner creation
+    const supabaseAdmin = createAdminClient();
     const supabase = await createClient();
 
     // Check if partner with this domain already exists
-    const { data: existingPartner } = await supabase
+    const { data: existingPartner } = await supabaseAdmin
       .from('partners')
       .select('id, name, status')
       .eq('domain', domain)
@@ -70,13 +72,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the partner with 'active' status (admin creates their own partner)
-    const { data: newPartner, error: partnerError } = await supabase
+    // Create the partner with 'pending' status - requires Moil admin approval
+    // Use admin client to bypass RLS
+    const { data: newPartner, error: partnerError } = await supabaseAdmin
       .from('partners')
       .insert({
         name: organizationName.trim(),
         domain: domain,
-        status: 'active',
+        status: 'pending',
         program_name: organizationName.trim(),
         full_name: organizationName.trim(),
         logo_initial: organizationName.trim().charAt(0).toUpperCase(),
@@ -92,9 +95,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Link the admin to the newly created partner
+    // Link the admin to the newly created partner using admin client
     if (userId) {
-      const { error: adminError } = await supabase
+      const { error: adminError } = await supabaseAdmin
         .from('admins')
         .update({ 
           partner_id: newPartner.id,
@@ -108,9 +111,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Send notification email to Moil admins for approval
+    const baseUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || 'https://partners.moilapp.com';
+    const approvalUrl = `${baseUrl}/api/partners/approve?partnerId=${newPartner.id}`;
+    
+    try {
+      await sendPartnerAccessRequestEmail({
+        organizationName: newPartner.name,
+        domain: newPartner.domain,
+        requesterEmail: email,
+        requestedAt: new Date().toISOString(),
+        approvalUrl: approvalUrl,
+      });
+      console.log('Partner access request email sent to Moil admins');
+    } catch (emailError) {
+      console.error('Failed to send partner access request email:', emailError);
+      // Don't fail the request - partner is created, email is just a notification
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Partner created successfully',
+      message: 'Partner access request submitted. Your account is pending approval by Moil administrators.',
       partner: {
         id: newPartner.id,
         name: newPartner.name,
