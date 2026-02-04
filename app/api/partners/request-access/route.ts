@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { sendPartnerAccessRequestEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send notification email to Moil admins for approval
-    const baseUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || 'https://partners.moilapp.com';
+    const baseUrl = getBaseUrl();
     const approvalUrl = `${baseUrl}/api/partners/approve?partnerId=${newPartner.id}`;
     
     try {

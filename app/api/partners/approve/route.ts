@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { sendPartnerApprovedEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/config';
 
 // GET /api/partners/approve?partnerId=xxx - Approve a partner (from email link)
 export async function GET(request: NextRequest) {
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Redirect to dashboard with success message
-    const baseUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || 'https://partners.moilapp.com';
+    const baseUrl = getBaseUrl();
     return NextResponse.redirect(new URL(`/moil-admin/dashboard?message=partner_approved&partner=${encodeURIComponent(partner.name)}`, baseUrl));
 
   } catch (error) {

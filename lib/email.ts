@@ -4,7 +4,7 @@ import { TeamInvitationEmail } from '../emails/team-invitation';
 import { PartnerAccessRequestEmail } from '../emails/partner-access-request';
 import { PartnerApprovedEmail } from '../emails/partner-approved';
 import { getEdcByEmail, getDefaultEdc, type PartnerEdc } from './partnerEdcs';
-import { getLogoUrl } from './config';
+import { getLogoUrl, getBaseUrl } from './config';
 
 // Initialize Resend with API key
 const resend = new Resend(process.env.RESEND_API);
@@ -498,9 +498,8 @@ export async function sendPartnerAccessRequestEmail(data: PartnerAccessRequestDa
       throw new Error('RESEND_API environment variable is not configured.');
     }
 
-    const dashboardUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL 
-      ? `${process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL}/moil-admin`
-      : 'https://partners.moilapp.com/moil-admin';
+    const baseUrl = getBaseUrl();
+    const dashboardUrl = `${baseUrl}/moil-admin`;
 
     const requestedAt = data.requestedAt || new Date().toISOString();
 
@@ -549,7 +548,7 @@ export async function sendPartnerApprovedEmail(data: PartnerApprovedData) {
       throw new Error('RESEND_API environment variable is not configured.');
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_PARTNER_PORTAL_URL || 'https://partners.moilapp.com';
+    const baseUrl = getBaseUrl();
     const loginUrl = `${baseUrl}/login`;
     const dashboardUrl = `${baseUrl}/admin/dashboard`;
 
