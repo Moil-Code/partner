@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
   const isPublicApiRoute = 
     request.nextUrl.pathname.startsWith('/api/licenses/verify') ||
     request.nextUrl.pathname.startsWith('/api/licenses/activate') ||
-    request.nextUrl.pathname.startsWith('/api/licenses/purchase')
+    request.nextUrl.pathname.startsWith('/api/licenses/purchase') ||
+    request.nextUrl.pathname.startsWith('/api/signup/')
   
   const isPaymentPage = request.nextUrl.pathname.startsWith('/payment')
   const isForgotPassword = request.nextUrl.pathname.startsWith('/forgot-password')
