@@ -5,10 +5,10 @@ import { sendPartnerApprovedEmail } from '@/lib/email';
 // POST /api/partners/[id]/approve - Approve a partner (from dashboard)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const partnerId = params.id;
+    const { id: partnerId } = await params;
     const supabase = await createClient();
 
     // Check if user is Moil admin
