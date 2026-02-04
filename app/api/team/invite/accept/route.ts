@@ -4,15 +4,27 @@ import { createClient } from '@/lib/supabase/server';
 // POST - Accept a team invitation
 export async function POST(request: Request) {
   try {
+    console.log('POST /api/team/invite/accept - Starting');
+    
     const supabase = await createClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log('Auth check:', { userId: user?.id, authError: authError?.message });
     
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { token } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    
+    const { token } = body;
+    console.log('Token received:', token ? 'yes' : 'no');
 
     if (!token) {
       return NextResponse.json({ error: 'Invitation token is required' }, { status: 400 });
@@ -25,11 +37,17 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .single();
 
+    console.log('Admin lookup:', { adminData, adminError: adminError?.message });
+
     if (adminError || !adminData) {
-      return NextResponse.json({ error: 'Admin profile not found' }, { status: 404 });
+      return NextResponse.json({ 
+        error: 'Admin profile not found',
+        details: adminError?.message 
+      }, { status: 404 });
     }
 
     // Get the invitation
+    console.log('Fetching invitation with token...');
     const { data: invitation, error: inviteError } = await supabase
       .from('team_invitations')
       .select(`
@@ -45,16 +63,25 @@ export async function POST(request: Request) {
       .gt('expires_at', new Date().toISOString())
       .single();
 
+    console.log('Invitation lookup:', { invitation: invitation?.id, inviteError: inviteError?.message });
+
     if (inviteError || !invitation) {
-      return NextResponse.json({ error: 'Invalid or expired invitation' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'Invalid or expired invitation',
+        details: inviteError?.message 
+      }, { status: 400 });
     }
 
-    // Check if email matches
-    if (invitation.email !== adminData.email) {
+    // Check if email matches (case-insensitive)
+    if (invitation.email.toLowerCase() !== adminData.email.toLowerCase()) {
+      console.log('Email mismatch:', { invitationEmail: invitation.email, adminEmail: adminData.email });
       return NextResponse.json({ 
-        error: 'This invitation is for a different email address' 
+        error: 'This invitation is for a different email address',
+        invitationEmail: invitation.email,
+        yourEmail: adminData.email
       }, { status: 403 });
     }
+    console.log('Email match confirmed');
 
     // Check if already a member of any team
     const { data: existingMembership } = await supabase
@@ -75,6 +102,7 @@ export async function POST(request: Request) {
     }
 
     // Add user as team member
+    console.log('Adding user as team member...');
     const { error: memberError } = await supabase
       .from('team_members')
       .insert({
@@ -86,8 +114,13 @@ export async function POST(request: Request) {
 
     if (memberError) {
       console.error('Add member error:', memberError);
-      return NextResponse.json({ error: 'Failed to join team' }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'Failed to join team',
+        details: memberError.message,
+        code: memberError.code
+      }, { status: 500 });
     }
+    console.log('Team member added successfully');
 
     // Update invitation status
     const { error: updateError } = await supabase
@@ -126,7 +159,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Accept invitation error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    }, { status: 500 });
   }
 }
 
