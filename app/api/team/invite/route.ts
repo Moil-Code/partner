@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendTeamInvitationEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/config';
 
 // POST - Invite a member to the team
 export async function POST(request: Request) {
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
     } : undefined;
 
     // Send invitation email
-    const baseUrl = process.env.NEXT_PUBLIC_INVITE_URL || 'https://partners.moilapp.com';
+    const baseUrl = getBaseUrl();
     const inviteUrl = `${baseUrl}/invite/accept?token=${invitation.token}`;
     const signupUrl = `${baseUrl}/signup?invite=${invitation.token}&team=${team.id}&teamName=${encodeURIComponent(team.name)}`;
     

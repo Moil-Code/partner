@@ -36,6 +36,7 @@ function SignupContent() {
   const [partnerInfo, setPartnerInfo] = useState<{ name: string; domain: string } | null>(null);
   const [existingPartnerForDomain, setExistingPartnerForDomain] = useState<{ name: string; domain: string } | null>(null);
   const [checkingDomain, setCheckingDomain] = useState(false);
+  const [invitationEmail, setInvitationEmail] = useState<string | null>(null);
   
   // Check if this is a partner admin signup (from Moil admin created link)
   const isPartnerAdminSignup = !!partnerId;
@@ -45,6 +46,25 @@ function SignupContent() {
   
   // Check if this is a Moil admin signup (@moilapp.com)
   const isMoilAdminSignup = extractedDomain === 'moilapp.com' && !isPartnerAdminSignup;
+  
+  // Fetch invitation details if invite token is provided
+  React.useEffect(() => {
+    if (inviteToken) {
+      const fetchInvitationDetails = async () => {
+        try {
+          const response = await fetch(`/api/team/invite/accept?token=${inviteToken}`);
+          const data = await response.json();
+          
+          if (response.ok && data.invitation) {
+            setInvitationEmail(data.invitation.email);
+          }
+        } catch (error) {
+          console.error('Error fetching invitation details:', error);
+        }
+      };
+      fetchInvitationDetails();
+    }
+  }, [inviteToken]);
   
   // Fetch partner info if partnerId is provided
   React.useEffect(() => {
@@ -157,6 +177,17 @@ function SignupContent() {
       toast({
         title: "Domain Already Registered",
         description: `The domain @${existingPartnerForDomain.domain} is already registered to ${existingPartnerForDomain.name}. Please contact your organization's admin to be invited to the team.`,
+        type: "error"
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Validate email matches invitation for invite signup
+    if (isInviteSignup && invitationEmail && email.toLowerCase() !== invitationEmail.toLowerCase()) {
+      toast({
+        title: "Email Mismatch",
+        description: `This invitation is for ${invitationEmail}. Please use the correct email address to sign up.`,
         type: "error"
       });
       setLoading(false);
@@ -548,6 +579,11 @@ function SignupContent() {
                         (must be @{partnerInfo.domain})
                       </span>
                     )}
+                    {isInviteSignup && invitationEmail && (
+                      <span className="ml-2 text-xs text-[var(--accent)] font-normal">
+                        (invitation sent to {invitationEmail})
+                      </span>
+                    )}
                   </label>
                   <div className="relative group">
                     <input 
@@ -555,12 +591,31 @@ function SignupContent() {
                       value={email}
                       onChange={(e) => handleEmailChange(e.target.value)}
                       className="w-full px-4 py-3 pl-11 bg-[var(--surface-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all text-[var(--text-primary)] placeholder-[var(--text-tertiary)]"
-                      placeholder={isPartnerAdminSignup && partnerInfo ? `name@${partnerInfo.domain}` : "name@company.com"}
+                      placeholder={isInviteSignup && invitationEmail ? invitationEmail : isPartnerAdminSignup && partnerInfo ? `name@${partnerInfo.domain}` : "name@company.com"}
                       required
                       disabled={loading}
                     />
                     <Mail className="w-5 h-5 text-[var(--text-tertiary)] absolute left-3.5 top-3.5 group-focus-within:text-[var(--primary)] transition-colors" />
                   </div>
+                  {isInviteSignup && invitationEmail && email && (
+                    <p className={`mt-2 text-xs flex items-center gap-1.5 px-3 py-2 rounded-lg border ${
+                      email.toLowerCase() === invitationEmail.toLowerCase()
+                        ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+                        : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                    }`}>
+                      {email.toLowerCase() === invitationEmail.toLowerCase() ? (
+                        <>
+                          <Shield className="w-3.5 h-3.5" />
+                          Email matches invitation
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="w-3.5 h-3.5" />
+                          Email must match invitation: {invitationEmail}
+                        </>
+                      )}
+                    </p>
+                  )}
                   {isPartnerAdminSignup && partnerInfo && extractedDomain && (
                     <p className={`mt-2 text-xs flex items-center gap-1.5 px-3 py-2 rounded-lg border ${
                       extractedDomain === partnerInfo.domain 

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { CheckCircle, AlertCircle, Clock, Shield, Users, Mail, ArrowRight, LogIn } from 'lucide-react';
+import { useToast } from '@/components/ui/toast/use-toast';
 
 interface InvitationDetails {
   id: string;
@@ -30,6 +31,7 @@ function AcceptInviteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
@@ -83,6 +85,16 @@ function AcceptInviteContent() {
       return;
     }
 
+    // Check if email matches before attempting to accept
+    if (userEmail && invitation && userEmail !== invitation.email) {
+      toast({
+        title: "Email Mismatch",
+        description: `This invitation is for ${invitation.email}. Please log in with the correct account.`,
+        type: "error"
+      });
+      return;
+    }
+
     setAccepting(true);
     setError('');
 
@@ -96,15 +108,36 @@ function AcceptInviteContent() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Failed to accept invitation');
+        const errorMessage = data.error || 'Failed to accept invitation';
+        setError(errorMessage);
+        toast({
+          title: "Invitation Error",
+          description: errorMessage,
+          type: "error"
+        });
         setAccepting(false);
         return;
       }
 
+      // Show success toast
+      toast({
+        title: "Welcome to the Team!",
+        description: `You've successfully joined ${invitation?.team.name}. Redirecting to dashboard...`,
+        type: "success"
+      });
+
       // Redirect to dashboard
-      router.push('/admin/dashboard?welcome=team');
+      setTimeout(() => {
+        router.push('/admin/dashboard');
+      }, 1000);
     } catch (err) {
-      setError('An error occurred while accepting the invitation');
+      const errorMessage = 'An error occurred while accepting the invitation';
+      setError(errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        type: "error"
+      });
       setAccepting(false);
     }
   };
