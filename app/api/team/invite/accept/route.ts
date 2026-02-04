@@ -102,17 +102,22 @@ export async function POST(request: Request) {
       console.error('Update invitation error:', updateError);
     }
 
-    // Log activity
-    await supabase.rpc('log_activity', {
-      p_team_id: invitation.team_id,
-      p_admin_id: user.id,
-      p_activity_type: 'member_joined',
-      p_description: `${adminData.email} joined the team as ${invitation.role}`,
-      p_metadata: { 
-        invited_by: invitation.invited_by, 
-        role: invitation.role 
-      }
-    });
+    // Log activity (non-blocking)
+    try {
+      await supabase.rpc('log_activity', {
+        p_team_id: invitation.team_id,
+        p_admin_id: user.id,
+        p_activity_type: 'member_joined',
+        p_description: `${adminData.email} joined the team as ${invitation.role}`,
+        p_metadata: { 
+          invited_by: invitation.invited_by, 
+          role: invitation.role 
+        }
+      });
+    } catch (logError) {
+      console.error('Failed to log activity (non-critical):', logError);
+      // Don't fail the request if logging fails
+    }
 
     return NextResponse.json({ 
       success: true,
@@ -160,7 +165,15 @@ export async function GET(request: Request) {
       .eq('token', token)
       .single();
 
-    if (inviteError || !invitation) {
+    if (inviteError) {
+      console.error('Get invitation error:', inviteError);
+      return NextResponse.json({ 
+        error: 'Invitation not found',
+        details: inviteError.message 
+      }, { status: 404 });
+    }
+
+    if (!invitation) {
       return NextResponse.json({ error: 'Invitation not found' }, { status: 404 });
     }
 
@@ -192,6 +205,9 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Get invitation error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
