@@ -109,7 +109,6 @@ export async function POST(request: Request) {
         team_id: invitation.team_id,
         admin_id: user.id,
         role: invitation.role,
-        invited_by: invitation.invited_by,
       });
 
     if (memberError) {
