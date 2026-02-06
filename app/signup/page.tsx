@@ -668,7 +668,6 @@ function SignupContent() {
                       Invitation sent to: <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded">{invitationEmail}</span>
                     </p>
                   )}
-                  {teamId && <p className="text-white/60 text-[10px] font-mono mt-1 bg-black/20 px-1.5 py-0.5 rounded inline-block">ID: {teamId.slice(0, 8)}...</p>}
                 </div>
               </div>
             </div>

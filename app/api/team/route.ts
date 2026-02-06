@@ -84,12 +84,18 @@ export async function GET() {
       console.error('Error fetching invitations:', invitationsError);
     }
 
+    // Filter out invitations where the user has already joined (their email is in team_members)
+    const memberEmails = new Set((members || []).map((m: any) => m.admin?.email?.toLowerCase()));
+    const filteredInvitations = (invitations || []).filter(
+      (inv: any) => !memberEmails.has(inv.email?.toLowerCase())
+    );
+
     return NextResponse.json({
       team: teamMember.team,
       userRole: teamMember.role,
       isOwner: (teamMember.team as any).owner_id === user.id,
       members: members || [],
-      pendingInvitations: invitations || [],
+      pendingInvitations: filteredInvitations,
       hasTeam: true,
       debug: {
         teamId,

@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const partnerId = formData.get('partnerId') as string;
+    const partnerName = formData.get('partnerName') as string;
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // For Moil admins creating new partners, allow upload without partnerId
+    // The logo URL will be passed to the partner creation API
+    const isNewPartnerUpload = isMoilAdmin && !partnerId && partnerName;
+    
     // Determine which partner to update
     let targetPartnerId = partnerId;
     if (!isMoilAdmin) {
@@ -78,7 +83,7 @@ export async function POST(request: NextRequest) {
       targetPartnerId = admin.partner_id;
     }
 
-    if (!targetPartnerId) {
+    if (!targetPartnerId && !isNewPartnerUpload) {
       return NextResponse.json({ error: 'Partner ID required' }, { status: 400 });
     }
 
@@ -88,12 +93,20 @@ export async function POST(request: NextRequest) {
     const base64 = buffer.toString('base64');
     const dataUri = `data:${file.type};base64,${base64}`;
 
+    // Generate a unique public_id for the upload
+    // For new partners, use a sanitized version of the partner name with timestamp
+    // For existing partners, use the partner ID
+    const sanitizedName = partnerName ? partnerName.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 30) : '';
+    const publicId = isNewPartnerUpload 
+      ? `new-${sanitizedName}-${Date.now()}`
+      : `partner-${targetPartnerId}`;
+
     // Upload to Cloudinary
     let uploadResult;
     try {
       uploadResult = await cloudinary.uploader.upload(dataUri, {
         folder: 'moil-partners/logos',
-        public_id: `partner-${targetPartnerId}`,
+        public_id: publicId,
         overwrite: true,
         resource_type: 'image',
         transformation: [
@@ -109,15 +122,18 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Update partner record with new logo URL
-    const { error: updateError } = await supabase
-      .from('partners')
-      .update({ logo_url: uploadResult.secure_url })
-      .eq('id', targetPartnerId);
+    // Only update partner record if we have a partnerId (not for new partner creation)
+    // For new partners, the logo URL will be passed to the create-with-team API
+    if (targetPartnerId) {
+      const { error: updateError } = await supabase
+        .from('partners')
+        .update({ logo_url: uploadResult.secure_url })
+        .eq('id', targetPartnerId);
 
-    if (updateError) {
-      console.error('Error updating partner logo:', updateError);
-      return NextResponse.json({ error: 'Failed to update partner' }, { status: 500 });
+      if (updateError) {
+        console.error('Error updating partner logo:', updateError);
+        return NextResponse.json({ error: 'Failed to update partner' }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ 

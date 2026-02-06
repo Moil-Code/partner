@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast/use-toast';
 import Logo from '@/components/ui/Logo';
 import { ColorPicker } from '@/components/ui/color-picker';
-import { ArrowLeft, Building2, Mail, Palette, Upload, X, ImageIcon, User, CheckCircle, Copy, Link } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Palette, Upload, X, ImageIcon, User, CheckCircle, Copy, Link, Send } from 'lucide-react';
 
 export default function CreatePartnerPage() {
   const router = useRouter();
@@ -28,6 +28,8 @@ export default function CreatePartnerPage() {
     signupLink: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,6 +180,56 @@ export default function CreatePartnerPage() {
     });
   };
 
+  const handleSendEmail = async () => {
+    if (!adminEmail || !createdData) return;
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        type: 'error',
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const response = await fetch('/api/email/partner-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: adminEmail,
+          partnerName: createdData.partner.name,
+          signupLink: createdData.signupLink,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send email');
+      }
+
+      toast({
+        title: 'Email Sent',
+        description: `Signup link sent to ${adminEmail}`,
+        type: 'success',
+      });
+      setAdminEmail('');
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to send email',
+        type: 'error',
+      });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[var(--background)] font-sans text-[var(--text-primary)]">
       {/* Header */}
@@ -257,6 +309,37 @@ export default function CreatePartnerPage() {
                     onClick={() => copyToClipboard(createdData.signupLink)}
                   >
                     <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Send Email to Admin */}
+              <div className="p-4 bg-[var(--secondary)]/5 rounded-xl border border-[var(--secondary)]/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Send className="w-4 h-4 text-[var(--secondary)]" />
+                  <p className="text-sm font-medium text-[var(--text-primary)]">Send Signup Link via Email</p>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] mb-3">
+                  Enter the partner admin's email address to send them the signup link directly.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="admin@partner.com"
+                    className="flex-1 px-3 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)]"
+                  />
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSendEmail}
+                    disabled={!adminEmail || sendingEmail}
+                    loading={sendingEmail}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send
                   </Button>
                 </div>
               </div>

@@ -579,3 +579,46 @@ export async function sendPartnerApprovedEmail(data: PartnerApprovedData) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
+
+// ============================================
+// PARTNER SIGNUP INVITE EMAIL
+// ============================================
+
+export interface PartnerSignupInviteData {
+  email: string;
+  partnerName: string;
+  signupLink: string;
+}
+
+export async function sendPartnerSignupInviteEmail(data: PartnerSignupInviteData) {
+  try {
+    if (!process.env.RESEND_API) {
+      throw new Error('RESEND_API environment variable is not configured.');
+    }
+
+    const { PartnerSignupInviteEmail } = await import('../emails/partner-signup-invite');
+
+    const result = await emailQueue.add(() =>
+      resend.emails.send({
+        from: FROM_EMAIL,
+        to: data.email,
+        subject: `🚀 You're Invited to Join ${data.partnerName} on Moil Partners`,
+        react: PartnerSignupInviteEmail({
+          partnerName: data.partnerName,
+          signupLink: data.signupLink,
+        }),
+      })
+    );
+
+    if (result.error) {
+      console.error('Resend API error:', result.error);
+      return { success: false, error: result.error.message };
+    }
+
+    console.log('Partner signup invite email sent to:', data.email, result.data?.id);
+    return { success: true, messageId: result.data?.id };
+  } catch (error) {
+    console.error('Error sending partner signup invite email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}

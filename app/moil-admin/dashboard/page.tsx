@@ -433,7 +433,7 @@ export default function MoilAdminDashboard() {
             )}
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <Card 
                 variant="glass" 
                 className="cursor-pointer hover:shadow-lg transition-all hover:border-[var(--primary)]/30"
@@ -445,8 +445,8 @@ export default function MoilAdminDashboard() {
                       <Plus className="w-6 h-6 text-[var(--primary)]" />
                     </div>
                     <div>
-                      <p className="font-semibold text-[var(--text-primary)]">Add New Partner</p>
-                      <p className="text-sm text-[var(--text-secondary)]">Create a new partner organization</p>
+                      <p className="font-semibold text-[var(--text-primary)]">Add Partner</p>
+                      <p className="text-sm text-[var(--text-secondary)]">Create new partner</p>
                     </div>
                   </div>
                 </CardContent>
@@ -464,7 +464,7 @@ export default function MoilAdminDashboard() {
                     </div>
                     <div>
                       <p className="font-semibold text-[var(--text-primary)]">Manage Partners</p>
-                      <p className="text-sm text-[var(--text-secondary)]">View and manage all partners</p>
+                      <p className="text-sm text-[var(--text-secondary)]">View all partners</p>
                     </div>
                   </div>
                 </CardContent>
@@ -482,7 +482,25 @@ export default function MoilAdminDashboard() {
                     </div>
                     <div>
                       <p className="font-semibold text-[var(--text-primary)]">View Teams</p>
-                      <p className="text-sm text-[var(--text-secondary)]">Browse all created teams</p>
+                      <p className="text-sm text-[var(--text-secondary)]">Browse all teams</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card 
+                variant="glass" 
+                className="cursor-pointer hover:shadow-lg transition-all hover:border-[var(--secondary)]/30"
+                onClick={() => router.push('/moil-admin/licenses')}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-[var(--secondary)]/10 flex items-center justify-center">
+                      <Key className="w-6 h-6 text-[var(--secondary)]" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-[var(--text-primary)]">Add License</p>
+                      <p className="text-sm text-[var(--text-secondary)]">Create new license</p>
                     </div>
                   </div>
                 </CardContent>
@@ -613,7 +631,8 @@ export default function MoilAdminDashboard() {
                               onClick={() => router.push(`/moil-admin/licenses?partnerId=${partner.id}`)}
                               className="hover:bg-[var(--secondary)]/10 hover:text-[var(--secondary)] focus:ring-2 focus:ring-[var(--secondary)]/20 focus:outline-none active:scale-95 transition-all"
                             >
-                              Manage Licenses
+                              <Key className="w-4 h-4 mr-1" />
+                              View Licenses
                             </Button>
                             {partner.status === 'pending' ? (
                               <>
