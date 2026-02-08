@@ -40,7 +40,9 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/api/licenses/verify') ||
     request.nextUrl.pathname.startsWith('/api/licenses/activate') ||
     request.nextUrl.pathname.startsWith('/api/licenses/purchase') ||
-    request.nextUrl.pathname.startsWith('/api/signup/')
+    request.nextUrl.pathname.startsWith('/api/signup/') ||
+    request.nextUrl.pathname.startsWith('/api/partners/approve') ||
+    request.nextUrl.pathname.startsWith('/api/partners/grant-access/')
   
   const isPaymentPage = request.nextUrl.pathname.startsWith('/payment')
   const isForgotPassword = request.nextUrl.pathname.startsWith('/forgot-password')

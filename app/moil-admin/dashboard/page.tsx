@@ -27,7 +27,8 @@ import {
   Users2,
   LayoutDashboard,
   Activity,
-  Briefcase
+  Briefcase,
+  X
 } from 'lucide-react';
 
 interface Partner {
@@ -58,7 +59,7 @@ interface Team {
   license_count?: number;
 }
 
-type TabType = 'overview' | 'partners' | 'teams';
+type TabType = 'overview' | 'partners' | 'teams' | 'licenses';
 
 export default function MoilAdminDashboard() {
   const router = useRouter();
@@ -71,6 +72,11 @@ export default function MoilAdminDashboard() {
   const { moilAdminActiveTab: activeTab, moilAdminSearchQuery: searchQuery, setMoilAdminActiveTab: setActiveTab, setMoilAdminSearchQuery: setSearchQuery } = useUIStore();
   
   const [updatingStatus, setUpdatingStatus] = React.useState<string | null>(null);
+  const [showAddLicenseModal, setShowAddLicenseModal] = React.useState(false);
+  const [licenseEmail, setLicenseEmail] = React.useState('');
+  const [addingLicense, setAddingLicense] = React.useState(false);
+  const [licenses, setLicenses] = React.useState<any[]>([]);
+  const [licensesLoading, setLicensesLoading] = React.useState(false);
 
   // Fetch auth and data on mount
   useEffect(() => {
@@ -96,6 +102,36 @@ export default function MoilAdminDashboard() {
       router.push('/admin/dashboard');
     }
   }, [authLoading, admin, isMoilAdmin, router, toast]);
+
+  // Fetch licenses when licenses tab is active
+  useEffect(() => {
+    if (isMoilAdmin && activeTab === 'licenses' && admin?.id) {
+      fetchLicenses();
+    }
+  }, [isMoilAdmin, activeTab, admin?.id]);
+
+  const fetchLicenses = async () => {
+    setLicensesLoading(true);
+    try {
+      const response = await fetch(`/api/licenses?adminId=${admin?.id}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch licenses');
+      }
+      
+      setLicenses(data.licenses || []);
+    } catch (error) {
+      console.error('Error fetching licenses:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load licenses',
+        type: 'error',
+      });
+    } finally {
+      setLicensesLoading(false);
+    }
+  };
 
 
   const handleToggleStatus = async (partner: Partner) => {
@@ -195,6 +231,83 @@ export default function MoilAdminDashboard() {
       });
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  const handleAddLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!licenseEmail.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please enter an email address',
+        type: 'error',
+      });
+      return;
+    }
+
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!emailRegex.test(licenseEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        type: 'error',
+      });
+      return;
+    }
+
+    if (!admin?.id) {
+      toast({
+        title: 'Error',
+        description: 'Admin information not available',
+        type: 'error',
+      });
+      return;
+    }
+
+    setAddingLicense(true);
+    try {
+      const response = await fetch('/api/licenses/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: licenseEmail.trim().toLowerCase(),
+          adminId: admin.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        toast({
+          title: 'Error',
+          description: data.error,
+          type: 'error',
+        });
+        return;
+      }
+
+      toast({
+        title: 'License Added',
+        description: `License created and activation email sent to ${licenseEmail}`,
+        type: 'success',
+      });
+
+      setLicenseEmail('');
+      setShowAddLicenseModal(false);
+      
+      // Refresh licenses list if on licenses tab
+      if (activeTab === 'licenses') {
+        fetchLicenses();
+      }
+    } catch (error) {
+      console.error('Error adding license:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add license',
+        type: 'error',
+      });
+    } finally {
+      setAddingLicense(false);
     }
   };
 
@@ -305,6 +418,17 @@ export default function MoilAdminDashboard() {
             >
               <Users2 className="w-4 h-4" />
               Teams
+            </button>
+            <button
+              onClick={() => setActiveTab('licenses')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
+                activeTab === 'licenses'
+                  ? 'border-[var(--primary)] text-[var(--primary)]'
+                  : 'border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]/50 rounded-t-lg'
+              }`}
+            >
+              <Key className="w-4 h-4" />
+              Licenses
             </button>
           </div>
         </div>
@@ -433,7 +557,7 @@ export default function MoilAdminDashboard() {
             )}
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <Card 
                 variant="glass" 
                 className="cursor-pointer hover:shadow-lg transition-all hover:border-[var(--primary)]/30"
@@ -491,7 +615,7 @@ export default function MoilAdminDashboard() {
               <Card 
                 variant="glass" 
                 className="cursor-pointer hover:shadow-lg transition-all hover:border-[var(--secondary)]/30"
-                onClick={() => router.push('/moil-admin/licenses')}
+                onClick={() => setShowAddLicenseModal(true)}
               >
                 <CardContent className="p-6">
                   <div className="flex items-center gap-4">
@@ -779,7 +903,170 @@ export default function MoilAdminDashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Licenses Tab */}
+        {activeTab === 'licenses' && (
+          <Card variant="glass">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-[var(--text-primary)]">Licenses</CardTitle>
+                  <CardDescription>All licenses created from your Moil admin account</CardDescription>
+                </div>
+                <Button onClick={() => setShowAddLicenseModal(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add License
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {licensesLoading ? (
+                <div className="text-center py-12">
+                  <Spinner size="lg" variant="primary" className="mx-auto" />
+                  <p className="mt-4 text-[var(--text-secondary)]">Loading licenses...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Licenses Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-[var(--border)]">
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Email</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Business Name</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Status</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Created</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-[var(--text-secondary)]">Activated</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {licenses.map((license) => (
+                          <tr key={license.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-subtle)] transition-colors">
+                            <td className="py-4 px-4">
+                              <p className="font-medium text-[var(--text-primary)]">{license.email}</p>
+                            </td>
+                            <td className="py-4 px-4 text-[var(--text-secondary)]">
+                              {license.business_name || '-'}
+                            </td>
+                            <td className="py-4 px-4">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                license.is_activated 
+                                  ? 'bg-[var(--accent)]/10 text-[var(--accent)]' 
+                                  : 'bg-[var(--warning)]/10 text-[var(--warning)]'
+                              }`}>
+                                {license.is_activated ? (
+                                  <>
+                                    <CheckCircle className="w-3 h-3" />
+                                    Activated
+                                  </>
+                                ) : (
+                                  <>
+                                    <Clock className="w-3 h-3" />
+                                    Pending
+                                  </>
+                                )}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-[var(--text-secondary)] text-sm">
+                              {new Date(license.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="py-4 px-4 text-[var(--text-secondary)] text-sm">
+                              {license.activated_at ? new Date(license.activated_at).toLocaleDateString() : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {licenses.length === 0 && (
+                      <div className="text-center py-12">
+                        <Key className="w-12 h-12 text-[var(--text-tertiary)] mx-auto mb-4" />
+                        <p className="text-[var(--text-secondary)] mb-2">No licenses found</p>
+                        <p className="text-sm text-[var(--text-tertiary)]">Click "Add License" to create your first license</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Add License Modal */}
+      {showAddLicenseModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--surface)] rounded-2xl shadow-2xl max-w-md w-full border border-[var(--border)]">
+            <div className="p-6 border-b border-[var(--border)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--secondary)]/10 flex items-center justify-center">
+                    <Key className="w-5 h-5 text-[var(--secondary)]" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)]">Add License</h2>
+                    <p className="text-sm text-[var(--text-secondary)]">Create a new license</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAddLicenseModal(false);
+                    setLicenseEmail('');
+                  }}
+                  className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleAddLicense} className="p-6 space-y-4">
+              {/* Email Input */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  value={licenseEmail}
+                  onChange={(e) => setLicenseEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full px-4 py-2.5 bg-[var(--surface-subtle)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)]"
+                  disabled={addingLicense}
+                  required
+                />
+                <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                  An activation email will be sent to this address
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddLicenseModal(false);
+                    setLicenseEmail('');
+                  }}
+                  disabled={addingLicense}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={addingLicense || !licenseEmail.trim()}
+                  loading={addingLicense}
+                  className="flex-1"
+                >
+                  {addingLicense ? 'Adding...' : 'Add License'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

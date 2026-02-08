@@ -22,9 +22,7 @@ import {
   Shield,
   Activity,
   Calendar,
-  User,
-  Plus,
-  Send
+  User
 } from 'lucide-react';
 
 interface Team {
@@ -90,9 +88,6 @@ export default function TeamViewPage() {
   const teamId = params.teamId as string;
   const { toast } = useToast();
   
-  const [showAddLicense, setShowAddLicense] = useState(false);
-  const [newLicenseEmail, setNewLicenseEmail] = useState('');
-  const [addingLicense, setAddingLicense] = useState(false);
 
   // Zustand stores
   const { isLoading: authLoading, isMoilAdmin, fetchAuth } = useAuthStore();
@@ -179,63 +174,6 @@ export default function TeamViewPage() {
     return `${window.location.origin}/invite/${token}`;
   };
 
-  const handleAddLicense = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLicenseEmail.trim() || !team) return;
-
-    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-    if (!emailRegex.test(newLicenseEmail)) {
-      toast({
-        title: 'Invalid Email',
-        description: 'Please enter a valid email address',
-        type: 'error',
-      });
-      return;
-    }
-
-    setAddingLicense(true);
-    try {
-      const response = await fetch('/api/licenses/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newLicenseEmail.trim().toLowerCase(),
-          teamId: team.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        toast({
-          title: 'Error',
-          description: data.error,
-          type: 'error',
-        });
-        return;
-      }
-
-      toast({
-        title: 'License Added',
-        description: `License added for ${newLicenseEmail}`,
-        type: 'success',
-      });
-
-      setNewLicenseEmail('');
-      setShowAddLicense(false);
-      invalidateTeam(teamId);
-      fetchTeamDetail(teamId);
-    } catch (error) {
-      console.error('Error adding license:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add license',
-        type: 'error',
-      });
-    } finally {
-      setAddingLicense(false);
-    }
-  };
 
   if (authLoading || !isMoilAdmin || dataLoading || !team) {
     return (
@@ -489,62 +427,13 @@ export default function TeamViewPage() {
         {/* Licenses Table */}
         <Card variant="glass" className="mt-6">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-[var(--text-primary)]">
-                  <Key className="w-5 h-5" />
-                  Assigned Licenses
-                </CardTitle>
-                <CardDescription>{licenses.length} license{licenses.length !== 1 ? 's' : ''} assigned</CardDescription>
-              </div>
-              <Button
-                onClick={() => setShowAddLicense(!showAddLicense)}
-                size="sm"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add License
-              </Button>
-            </div>
+            <CardTitle className="flex items-center gap-2 text-[var(--text-primary)]">
+              <Key className="w-5 h-5" />
+              Licenses
+            </CardTitle>
+            <CardDescription>{licenses.length} license{licenses.length !== 1 ? 's' : ''} assigned</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Add License Form */}
-            {showAddLicense && (
-              <form onSubmit={handleAddLicense} className="mb-6 p-4 bg-[var(--surface-subtle)] rounded-lg border border-[var(--border)]">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <input
-                      type="email"
-                      value={newLicenseEmail}
-                      onChange={(e) => setNewLicenseEmail(e.target.value)}
-                      placeholder="Enter email address"
-                      className="w-full px-4 py-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] text-[var(--text-primary)]"
-                      disabled={addingLicense}
-                    />
-                  </div>
-                  <Button type="submit" disabled={addingLicense || !newLicenseEmail.trim()}>
-                    {addingLicense ? (
-                      <Spinner size="sm" className="mr-2" />
-                    ) : (
-                      <Send className="w-4 h-4 mr-2" />
-                    )}
-                    {addingLicense ? 'Adding...' : 'Add & Send'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setShowAddLicense(false);
-                      setNewLicenseEmail('');
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-                <p className="text-xs text-[var(--text-tertiary)] mt-2">
-                  An activation email will be sent to the provided email address.
-                </p>
-              </form>
-            )}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
