@@ -12,6 +12,7 @@ import { PurchaseCard } from '@/components/Dashboard/PurchaseCard';
 import { AddLicenseForm } from '@/components/Dashboard/AddLicenseForm';
 import { LicenseList } from '@/components/Dashboard/LicenseList';
 import { PurchaseModal } from '@/components/Dashboard/PurchaseModal';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 interface Partner {
   id: string;
@@ -61,6 +62,7 @@ const DashboardPage = () => {
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [partner, setPartner] = useState<Partner | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     checkAuthAndFetchLicenses();
@@ -274,7 +276,12 @@ const DashboardPage = () => {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const executeLogout = async () => {
+    setShowLogoutConfirm(false);
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
@@ -355,6 +362,17 @@ const DashboardPage = () => {
       {showActivityPanel && (
         <ActivityPanel onClose={() => setShowActivityPanel(false)} />
       )}
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={executeLogout}
+        title="Logout"
+        description="Are you sure you want to logout? You will need to sign in again to access the dashboard."
+        confirmText="Logout"
+        variant="warning"
+      />
     </div>
   );
 };

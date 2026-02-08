@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast/use-toast';
 import Logo from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { useAuthStore, usePartnerStore, useTeamStore, useUIStore } from '@/lib/stores';
 import { 
   Building2, 
@@ -77,6 +78,23 @@ export default function MoilAdminDashboard() {
   const [addingLicense, setAddingLicense] = React.useState(false);
   const [licenses, setLicenses] = React.useState<any[]>([]);
   const [licensesLoading, setLicensesLoading] = React.useState(false);
+  
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = React.useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+    variant: 'danger' | 'warning';
+    confirmText: string;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: () => {},
+    variant: 'danger',
+    confirmText: 'Confirm',
+  });
 
   // Fetch auth and data on mount
   useEffect(() => {
@@ -134,7 +152,27 @@ export default function MoilAdminDashboard() {
   };
 
 
-  const handleToggleStatus = async (partner: Partner) => {
+  const handleToggleStatus = (partner: Partner) => {
+    const newStatus = partner.status === 'active' ? 'suspended' : 'active';
+    
+    if (newStatus === 'suspended') {
+      // Show confirmation for suspend action
+      setConfirmModal({
+        isOpen: true,
+        title: 'Suspend Partner',
+        description: `Are you sure you want to suspend ${partner.name}? This will prevent them from accessing the platform.`,
+        confirmText: 'Suspend',
+        variant: 'warning',
+        onConfirm: () => executeToggleStatus(partner),
+      });
+    } else {
+      // Activate without confirmation
+      executeToggleStatus(partner);
+    }
+  };
+
+  const executeToggleStatus = async (partner: Partner) => {
+    setConfirmModal({ ...confirmModal, isOpen: false });
     setUpdatingStatus(partner.id);
     try {
       const supabase = createClient();
@@ -201,7 +239,19 @@ export default function MoilAdminDashboard() {
     }
   };
 
-  const handleRejectPartner = async (partner: Partner) => {
+  const handleRejectPartner = (partner: Partner) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reject Partner',
+      description: `Are you sure you want to reject ${partner.name}? This action cannot be undone and will permanently delete their access request.`,
+      confirmText: 'Reject',
+      variant: 'danger',
+      onConfirm: () => executeRejectPartner(partner),
+    });
+  };
+
+  const executeRejectPartner = async (partner: Partner) => {
+    setConfirmModal({ ...confirmModal, isOpen: false });
     setUpdatingStatus(partner.id);
     try {
       const supabase = createClient();
@@ -311,7 +361,19 @@ export default function MoilAdminDashboard() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Logout',
+      description: 'Are you sure you want to logout? You will need to sign in again to access the dashboard.',
+      confirmText: 'Logout',
+      variant: 'warning',
+      onConfirm: executeLogout,
+    });
+  };
+
+  const executeLogout = async () => {
+    setConfirmModal({ ...confirmModal, isOpen: false });
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
@@ -1067,6 +1129,18 @@ export default function MoilAdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        confirmText={confirmModal.confirmText}
+        variant={confirmModal.variant}
+        isLoading={updatingStatus !== null}
+      />
     </div>
   );
 }
