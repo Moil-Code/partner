@@ -51,7 +51,15 @@ function SignupContent() {
   const isInviteSignup = !!inviteToken;
   
   // Check if this is a Moil admin signup (@moilapp.com)
-  const isMoilAdminSignup = extractedDomain === 'moilapp.com' && !isPartnerAdminSignup;
+  // Only specific emails can create moil-admin accounts
+  const ALLOWED_MOIL_ADMIN_EMAILS = [
+    'steve@moilapp.com',
+    'andres@moilapp.com',
+    'taiwo@moilapp.com',
+    'jacob@moilapp.com',
+    'ablad@moilapp.com',
+  ];
+  const isMoilAdminSignup = extractedDomain === 'moilapp.com' && !isPartnerAdminSignup && ALLOWED_MOIL_ADMIN_EMAILS.includes(email.toLowerCase());
   
   // Fetch invitation details if invite token is provided
   React.useEffect(() => {

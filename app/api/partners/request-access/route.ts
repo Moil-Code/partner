@@ -49,22 +49,23 @@ export async function POST(request: NextRequest) {
 
     if (existingPartner) {
       if (existingPartner.status === 'active') {
-        // Partner already exists and is active - link the admin to it
-        if (userId) {
-          await supabase
-            .from('admins')
-            .update({ 
-              partner_id: existingPartner.id,
-              global_role: 'partner_admin'
-            })
-            .eq('id', userId);
-        }
-        return NextResponse.json({
-          success: true,
-          message: 'Your account has been linked to the existing partner',
-          partner: existingPartner,
-          userId: userId || null,
-        });
+        // Partner already exists and is active - user needs to be invited by existing admin
+        return NextResponse.json(
+          { 
+            error: 'This domain is already registered to an existing partner. Please contact your organization administrator to receive an invitation.',
+            code: 'DOMAIN_ALREADY_REGISTERED'
+          },
+          { status: 409 }
+        );
+      } else if (existingPartner.status === 'pending') {
+        // Partner exists but is pending approval
+        return NextResponse.json(
+          { 
+            error: 'This domain has a pending partner request. Please wait for approval or contact your organization administrator.',
+            code: 'DOMAIN_PENDING_APPROVAL'
+          },
+          { status: 409 }
+        );
       } else if (existingPartner.status === 'suspended') {
         return NextResponse.json(
           { error: 'This domain has been suspended. Please contact support.' },
