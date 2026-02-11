@@ -58,6 +58,7 @@ interface Team {
   created_at: string;
   member_count?: number;
   license_count?: number;
+  purchased_license_count?: number;
 }
 
 type TabType = 'overview' | 'partners' | 'teams' | 'licenses';
@@ -932,7 +933,7 @@ export default function MoilAdminDashboard() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Key className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                        <span className="text-xs text-[var(--text-secondary)]">{team.license_count || 0} licenses</span>
+                        <span className="text-xs text-[var(--text-secondary)]">{team.license_count || 0} / {team.purchased_license_count || 0} licenses</span>
                       </div>
                     </div>
 

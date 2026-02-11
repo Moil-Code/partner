@@ -194,6 +194,15 @@ export default function CreatePartnerPage() {
       return;
     }
 
+    if(!adminEmail.includes(domain)) {
+      toast({
+        title: 'Invalid Email Domain',
+        description: `Admin email must be from the partner domain (@${domain})`,
+        type: 'error',
+      });
+      return;
+    }
+
     setSendingEmail(true);
     try {
       const response = await fetch('/api/email/partner-signup', {

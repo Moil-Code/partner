@@ -22,7 +22,11 @@ import {
   Shield,
   Activity,
   Calendar,
-  User
+  User,
+  Edit2,
+  Plus,
+  Minus,
+  X
 } from 'lucide-react';
 
 interface Team {
@@ -161,6 +165,18 @@ export default function TeamViewPage() {
     }
   }, [isMoilAdmin, dataLoading, team, teamDetail, router, toast]);
 
+  // State for editing purchased license count
+  const [showEditLicenseModal, setShowEditLicenseModal] = React.useState(false);
+  const [newLicenseCount, setNewLicenseCount] = React.useState(0);
+  const [updatingLicenseCount, setUpdatingLicenseCount] = React.useState(false);
+
+  // Initialize license count when team data loads
+  React.useEffect(() => {
+    if (team) {
+      setNewLicenseCount(team.purchased_license_count || 0);
+    }
+  }, [team]);
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -174,6 +190,51 @@ export default function TeamViewPage() {
     return `${window.location.origin}/invite/${token}`;
   };
 
+  const handleUpdateLicenseCount = async () => {
+    if (newLicenseCount < 0) {
+      toast({
+        title: 'Invalid Count',
+        description: 'License count cannot be negative',
+        type: 'error',
+      });
+      return;
+    }
+
+    setUpdatingLicenseCount(true);
+    try {
+      const response = await fetch(`/api/teams/${teamId}/update-license-count`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchasedLicenseCount: newLicenseCount }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Failed to update license count');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Purchased license count updated successfully',
+        type: 'success',
+      });
+
+      setShowEditLicenseModal(false);
+      // Refresh team data
+      invalidateTeam(teamId);
+      fetchTeamDetail(teamId);
+    } catch (error) {
+      console.error('Error updating license count:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to update license count',
+        type: 'error',
+      });
+    } finally {
+      setUpdatingLicenseCount(false);
+    }
+  };
 
   if (authLoading || !isMoilAdmin || dataLoading || !team) {
     return (
@@ -403,12 +464,25 @@ export default function TeamViewPage() {
                     <p className="font-medium text-[var(--text-primary)] font-mono">{team.domain}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
-                  <Key className="w-5 h-5 text-[var(--text-tertiary)]" />
-                  <div>
-                    <p className="text-xs text-[var(--text-tertiary)]">Purchased Licenses</p>
-                    <p className="font-medium text-[var(--text-primary)]">{team.purchased_license_count}</p>
+                <div className="flex items-center justify-between p-3 bg-[var(--surface-subtle)] rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Key className="w-5 h-5 text-[var(--text-tertiary)]" />
+                    <div>
+                      <p className="text-xs text-[var(--text-tertiary)]">Purchased Licenses</p>
+                      <p className="font-medium text-[var(--text-primary)]">{team.purchased_license_count}</p>
+                    </div>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setNewLicenseCount(team.purchased_license_count || 0);
+                      setShowEditLicenseModal(true);
+                    }}
+                    className="text-[var(--primary)] hover:bg-[var(--primary)]/10"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
                 </div>
                 <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
                   <Calendar className="w-5 h-5 text-[var(--text-tertiary)]" />
@@ -489,6 +563,94 @@ export default function TeamViewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Purchased License Count Modal */}
+      {showEditLicenseModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--surface)] rounded-2xl shadow-2xl max-w-md w-full border border-[var(--border)]">
+            <div className="p-6 border-b border-[var(--border)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
+                    <Key className="w-5 h-5 text-[var(--primary)]" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)]">Edit License Count</h2>
+                    <p className="text-sm text-[var(--text-secondary)]">Update purchased licenses for {team.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowEditLicenseModal(false)}
+                  className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                  Purchased License Count
+                </label>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewLicenseCount(Math.max(0, newLicenseCount - 1))}
+                    disabled={updatingLicenseCount || newLicenseCount <= 0}
+                    className="w-10 h-10 p-0"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newLicenseCount}
+                    onChange={(e) => setNewLicenseCount(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="flex-1 px-4 py-2.5 bg-[var(--surface-subtle)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] text-[var(--text-primary)] text-center text-lg font-semibold"
+                    disabled={updatingLicenseCount}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewLicenseCount(newLicenseCount + 1)}
+                    disabled={updatingLicenseCount}
+                    className="w-10 h-10 p-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                  Current: {team.purchased_license_count || 0} • Used: {stats.totalLicenses}
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditLicenseModal(false)}
+                  disabled={updatingLicenseCount}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleUpdateLicenseCount}
+                  disabled={updatingLicenseCount}
+                  loading={updatingLicenseCount}
+                  className="flex-1"
+                >
+                  {updatingLicenseCount ? 'Updating...' : 'Update'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -471,9 +471,28 @@ function SignupContent() {
           router.push('/login');
         }, 2000);
       } else {
-        // Partner access request flow:
-        // 1. First, sign up the user with Supabase Auth
+       // Partner access request flow:
+        // 1. First, check if domain is already registered to prevent orphaned auth accounts
         const supabase = createClient();
+        const emailDomain = extractedDomain;
+        
+        const { data: existingPartner } = await supabase
+          .from('partners')
+          .select('name, domain')
+          .eq('domain', emailDomain)
+          .single();
+        
+        if (existingPartner) {
+          toast({
+            title: "Domain Already Registered",
+            description: `The domain @${existingPartner.domain} is already registered to ${existingPartner.name}. Please contact your organization's admin to be invited to the team.`,
+            type: "error"
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // 2. Sign up the user with Supabase Auth
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
