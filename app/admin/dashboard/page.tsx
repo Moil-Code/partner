@@ -242,7 +242,7 @@ const DashboardPage = () => {
     setPurchaseError('');
 
     try {
-      const response = await fetch('https://moilapp.com/api/stripe/buy-licenses', {
+      const response = await fetch('https://stagebeta.moilapp.com/api/stripe/buy-licenses', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
