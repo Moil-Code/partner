@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const { data: partner, error: partnerError } = await supabaseAdmin
       .from('partners')
       .insert({
-        name: body.partnerName.trim(),
+        name: body.partnerName.trim().toLowerCase(),
         domain: domain,
         status: 'active',
         program_name: body.partnerName.trim(),

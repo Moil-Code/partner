@@ -4,7 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 /**
  * Public endpoint to verify license and organization
  * No authentication required - this is used by the mobile app
- * Usage: GET /api/licenses?licenseId=xxx&orgSlug=xxx
+ * Usage: GET /api/licenses/verify?licenseId=xxx&orgSlug=xxx
  */
 export async function GET(request: Request) {
   try {
@@ -41,22 +41,11 @@ export async function GET(request: Request) {
       .eq('id', licenseId)
       .single();
 
-    if (licenseError || !license) {
-      return NextResponse.json(
-        {
-          error: 'License not found',
-          verified: false,
-          partnerVerified: false,
-        },
-        { status: 404 }
-      );
-    }
-
     // Query partner separately
-    const partnerName = orgSlug
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    // Convert "nerds-labs" -> "nerds labs" (no capitalization needed, names are stored in lowercase)
+    const partnerName = orgSlug.split('-').join(' ');
+
+    console.log(partnerName);
 
     const { data: partner, error: partnerError } = await supabase
       .from('partners')
@@ -64,6 +53,8 @@ export async function GET(request: Request) {
       .ilike('name', partnerName)
       .eq('status', 'active')
       .single();
+
+    console.log(partner);
 
     if (partnerError || !partner) {
       return NextResponse.json(

@@ -103,7 +103,8 @@ export async function PATCH(
     
     for (const [key, value] of Object.entries(body)) {
       if (partnerAdminAllowedFields.includes(key)) {
-        updateData[key] = value;
+        // Convert name to lowercase to maintain consistency
+        updateData[key] = key === 'name' && typeof value === 'string' ? value.toLowerCase() : value;
       } else if (isMoilAdmin && moilAdminOnlyFields.includes(key)) {
         updateData[key] = value;
       }

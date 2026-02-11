@@ -35,7 +35,9 @@ export async function POST(request: Request) {
       support_email?: string;
     } | null;
     const partnerName = partnerInfo?.name || 'moil-partners';
-    const orgSlug = partnerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // Create URL-safe org name (replace spaces with hyphens)
+    // Partner names are already lowercase and contain only alphanumeric chars and spaces
+    const orgSlug = partnerName.replace(/\s+/g, '-');
     
     // Build EDC info for email from partner data
     const edcInfo = partnerInfo ? {

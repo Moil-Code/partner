@@ -21,11 +21,8 @@ export async function GET(
     const supabaseAdmin = createAdminClient();
 
     // Reverse the slug transformation to get the original name
-    // Convert "nerds-labs" -> "Nerds Labs" (capitalize each word)
-    const reversedName = orgSlug
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    // Convert "nerds-labs" -> "nerds labs" (no capitalization needed, names are stored in lowercase)
+    const reversedName = orgSlug.split('-').join(' ');
 
     console.log('🔍 Reversed name from slug:', reversedName);
     console.log('🔍 Original slug:', orgSlug);

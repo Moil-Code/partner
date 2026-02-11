@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const { data: newPartner, error: partnerError } = await supabaseAdmin
       .from('partners')
       .insert({
-        name: organizationName.trim(),
+        name: organizationName.trim().toLowerCase(),
         domain: domain,
         status: 'pending',
         program_name: organizationName.trim(),

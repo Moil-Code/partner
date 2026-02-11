@@ -97,6 +97,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name and domain are required' }, { status: 400 });
     }
 
+    // Validate partner name format (only alphanumeric and spaces for slug compatibility)
+    const nameRegex = /^[a-z0-9\s]+$/i;
+    if (!nameRegex.test(body.name.trim())) {
+      return NextResponse.json({ error: 'Partner name can only contain letters, numbers, and spaces' }, { status: 400 });
+    }
+
     // Validate domain format
     const domainRegex = /^[a-z0-9][a-z0-9\.-]*\.[a-z]{2,}$/;
     if (!domainRegex.test(body.domain.toLowerCase())) {
@@ -121,7 +127,7 @@ export async function POST(request: NextRequest) {
     const { data: partner, error: createError } = await supabaseAdmin
       .from('partners')
       .insert({
-        name: body.name.trim(),
+        name: body.name.trim().toLowerCase(),
         domain: body.domain.toLowerCase().trim(),
         status: 'active',
       })
