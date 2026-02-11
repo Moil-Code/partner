@@ -3,10 +3,10 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { teamId: string } }
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   try {
-    const { teamId } = params;
+    const { teamId } = await params;
     const body = await request.json();
     const { purchasedLicenseCount } = body;
 
