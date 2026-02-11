@@ -194,10 +194,12 @@ export default function CreatePartnerPage() {
       return;
     }
 
-    if(!adminEmail.includes(domain)) {
+    // Extract domain from admin email
+    const emailDomain = adminEmail.split('@')[1]?.toLowerCase();
+    if(emailDomain !== createdData.partner.domain.toLowerCase()) {
       toast({
         title: 'Invalid Email Domain',
-        description: `Admin email must be from the partner domain (@${domain})`,
+        description: `Admin email must be from the partner domain (@${createdData.partner.domain})`,
         type: 'error',
       });
       return;
@@ -344,7 +346,7 @@ export default function CreatePartnerPage() {
                     variant="primary"
                     size="sm"
                     onClick={handleSendEmail}
-                    disabled={!adminEmail || sendingEmail}
+                    disabled={!adminEmail || sendingEmail || !adminEmail.includes(createdData?.partner.domain)}
                     loading={sendingEmail}
                   >
                     <Send className="w-4 h-4 mr-2" />
