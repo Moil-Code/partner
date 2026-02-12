@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, RefreshCw, CheckCircle, Clock, Mail, AlertCircle, Send, Edit2, Check, X, Filter } from 'lucide-react';
+import { Search, Download, RefreshCw, CheckCircle, Clock, Mail, AlertCircle, Send, Edit2, Check, X, Filter, Trash2 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -29,6 +29,9 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
   const [editingEmail, setEditingEmail] = useState('');
   const [updatingEmail, setUpdatingEmail] = useState(false);
   const [syncingStatuses, setSyncingStatuses] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [licenseToDelete, setLicenseToDelete] = useState<License | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
   // Sync email statuses from Resend to database on component mount
@@ -190,6 +193,52 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
         description: err.message || 'An error occurred',
         type: "error"
       });
+    }
+  };
+
+  const openDeleteModal = (license: License) => {
+    setLicenseToDelete(license);
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setLicenseToDelete(null);
+    setDeleteModalOpen(false);
+  };
+
+  const handleDeleteLicense = async () => {
+    if (!licenseToDelete) return;
+
+    setDeleting(true);
+    try {
+      const response = await fetch('/api/licenses/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseId: licenseToDelete.id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete license');
+      }
+
+      toast({
+        title: "Success",
+        description: "License deleted successfully",
+        type: "success"
+      });
+
+      closeDeleteModal();
+      onRefresh();
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || 'An error occurred',
+        type: "error"
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -399,17 +448,28 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
                       {license.activatedAt ? formatDate(license.activatedAt) : <span className="text-[var(--text-tertiary)]">-</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {!license.isActivated && (
+                      <div className="flex items-center justify-end gap-2">
+                        {!license.isActivated && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleResendEmail(license.id)}
+                            className="h-8 text-[var(--primary)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/10"
+                            title="Resend Invitation"
+                          >
+                            Resend
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"
-                          onClick={() => handleResendEmail(license.id)}
-                          className="h-8 text-[var(--primary)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/10"
-                          title="Resend Invitation"
+                          onClick={() => openDeleteModal(license)}
+                          className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete License"
                         >
-                        Resend
+                          <Trash2 className="w-4 h-4" />
                         </Button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -425,6 +485,59 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
           </div>
         </div>
       </CardContent>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && licenseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
+            onClick={closeDeleteModal}
+          />
+          <div className="relative bg-[var(--surface)] rounded-xl shadow-2xl border border-[var(--border)] p-6 max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-red-100 text-red-600">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                  Delete License
+                </h3>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  {licenseToDelete.email}
+                </p>
+              </div>
+            </div>
+            
+            <p className="text-[var(--text-secondary)] mb-6">
+              Are you sure you want to delete this license? This action cannot be undone and the license will be permanently removed from the database.
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeleteLicense}
+                disabled={deleting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleting ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

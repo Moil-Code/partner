@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,6 @@ import {
   Users2,
   LayoutDashboard,
   Activity,
-  Briefcase,
   X
 } from 'lucide-react';
 
@@ -908,10 +908,10 @@ export default function MoilAdminDashboard() {
                     team.domain?.toLowerCase().includes(searchQuery.toLowerCase())
                   )
                   .map((team) => (
-                  <div 
+                  <Link 
                     key={team.id} 
                     className="p-4 bg-[var(--surface-subtle)] rounded-xl border border-[var(--border)] hover:border-[var(--primary)]/30 hover:shadow-md transition-all cursor-pointer"
-                    onClick={() => router.push(`/moil-admin/teams/${team.id}`)}
+                    href={`/moil-admin/teams/${team.id}`}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -944,17 +944,13 @@ export default function MoilAdminDashboard() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/moil-admin/teams/${team.id}`);
-                        }}
                         className="text-[var(--primary)]"
                       >
                         <Eye className="w-4 h-4 mr-1" />
                         View
                       </Button>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
               {teams.length === 0 && (

@@ -159,7 +159,7 @@ export async function getPartnerEmailInfoFromDb(partnerId: string): Promise<EdcE
     return {
       programName: partner.program_name,
       fullName: partner.full_name,
-      logo: partner.logo_url || getLogoUrl(),
+      logo: partner.logo_url || undefined, // Don't default to Moil logo - let email template use logoInitial fallback
       logoInitial: partner.logo_initial,
       primaryColor: partner.primary_color,
       supportEmail: partner.support_email,

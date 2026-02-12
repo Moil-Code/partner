@@ -165,17 +165,10 @@ export default function TeamViewPage() {
     }
   }, [isMoilAdmin, dataLoading, team, teamDetail, router, toast]);
 
-  // State for editing purchased license count
+  // State for adding licenses
   const [showEditLicenseModal, setShowEditLicenseModal] = React.useState(false);
-  const [newLicenseCount, setNewLicenseCount] = React.useState(0);
+  const [licensesToAdd, setLicensesToAdd] = React.useState(0);
   const [updatingLicenseCount, setUpdatingLicenseCount] = React.useState(false);
-
-  // Initialize license count when team data loads
-  React.useEffect(() => {
-    if (team) {
-      setNewLicenseCount(team.purchased_license_count || 0);
-    }
-  }, [team]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -191,21 +184,25 @@ export default function TeamViewPage() {
   };
 
   const handleUpdateLicenseCount = async () => {
-    if (newLicenseCount < 0) {
+    if (licensesToAdd <= 0) {
       toast({
         title: 'Invalid Count',
-        description: 'License count cannot be negative',
+        description: 'Please enter a positive number of licenses to add',
         type: 'error',
       });
       return;
     }
+
+    if (!team) return;
+
+    const newTotalCount = (team.purchased_license_count || 0) + licensesToAdd;
 
     setUpdatingLicenseCount(true);
     try {
       const response = await fetch(`/api/teams/${teamId}/update-license-count`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ purchasedLicenseCount: newLicenseCount }),
+        body: JSON.stringify({ purchasedLicenseCount: newTotalCount }),
       });
 
       const data = await response.json();
@@ -216,11 +213,12 @@ export default function TeamViewPage() {
 
       toast({
         title: 'Success',
-        description: 'Purchased license count updated successfully',
+        description: `Added ${licensesToAdd} license${licensesToAdd !== 1 ? 's' : ''}. New total: ${newTotalCount}`,
         type: 'success',
       });
 
       setShowEditLicenseModal(false);
+      setLicensesToAdd(0);
       // Refresh team data
       invalidateTeam(teamId);
       fetchTeamDetail(teamId);
@@ -476,12 +474,12 @@ export default function TeamViewPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setNewLicenseCount(team.purchased_license_count || 0);
+                      setLicensesToAdd(0);
                       setShowEditLicenseModal(true);
                     }}
                     className="text-[var(--primary)] hover:bg-[var(--primary)]/10"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Plus className="w-4 h-4" />
                   </Button>
                 </div>
                 <div className="flex items-center gap-3 p-3 bg-[var(--surface-subtle)] rounded-lg">
@@ -575,8 +573,8 @@ export default function TeamViewPage() {
                     <Key className="w-5 h-5 text-[var(--primary)]" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-[var(--text-primary)]">Edit License Count</h2>
-                    <p className="text-sm text-[var(--text-secondary)]">Update purchased licenses for {team.name}</p>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)]">Add Licenses</h2>
+                    <p className="text-sm text-[var(--text-secondary)]">Add more licenses for {team.name}</p>
                   </div>
                 </div>
                 <button
@@ -591,14 +589,14 @@ export default function TeamViewPage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Purchased License Count
+                  Number of Licenses to Add
                 </label>
                 <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setNewLicenseCount(Math.max(0, newLicenseCount - 1))}
-                    disabled={updatingLicenseCount || newLicenseCount <= 0}
+                    onClick={() => setLicensesToAdd(Math.max(0, licensesToAdd - 1))}
+                    disabled={updatingLicenseCount || licensesToAdd <= 0}
                     className="w-10 h-10 p-0"
                   >
                     <Minus className="w-4 h-4" />
@@ -606,15 +604,15 @@ export default function TeamViewPage() {
                   <input
                     type="number"
                     min="0"
-                    value={newLicenseCount}
-                    onChange={(e) => setNewLicenseCount(Math.max(0, parseInt(e.target.value) || 0))}
+                    value={licensesToAdd}
+                    onChange={(e) => setLicensesToAdd(Math.max(0, parseInt(e.target.value) || 0))}
                     className="flex-1 px-4 py-2.5 bg-[var(--surface-subtle)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] text-[var(--text-primary)] text-center text-lg font-semibold"
                     disabled={updatingLicenseCount}
                   />
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setNewLicenseCount(newLicenseCount + 1)}
+                    onClick={() => setLicensesToAdd(licensesToAdd + 1)}
                     disabled={updatingLicenseCount}
                     className="w-10 h-10 p-0"
                   >
@@ -622,7 +620,7 @@ export default function TeamViewPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-[var(--text-tertiary)] mt-2">
-                  Current: {team.purchased_license_count || 0} • Used: {stats.totalLicenses}
+                  Current: {team.purchased_license_count || 0} • Used: {stats.totalLicenses} • New Total: {(team.purchased_license_count || 0) + licensesToAdd}
                 </p>
               </div>
 
@@ -640,11 +638,11 @@ export default function TeamViewPage() {
                   type="button"
                   variant="primary"
                   onClick={handleUpdateLicenseCount}
-                  disabled={updatingLicenseCount}
+                  disabled={updatingLicenseCount || licensesToAdd <= 0}
                   loading={updatingLicenseCount}
                   className="flex-1"
                 >
-                  {updatingLicenseCount ? 'Updating...' : 'Update'}
+                  {updatingLicenseCount ? 'Adding...' : `Add ${licensesToAdd} License${licensesToAdd !== 1 ? 's' : ''}`}
                 </Button>
               </div>
             </div>

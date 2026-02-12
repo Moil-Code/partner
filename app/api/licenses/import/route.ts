@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const edcInfo = partnerInfo ? {
       programName: partnerInfo.program_name || partnerInfo.name || 'Moil Partners',
       fullName: partnerInfo.name || 'Moil Partners',
-      logo: partnerInfo.logo_url || 'https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png',
+      logo: partnerInfo.logo_url || undefined, // Don't default to Moil logo - let email template use logoInitial fallback
       logoInitial: partnerInfo.logo_initial || partnerInfo.name?.charAt(0) || 'M',
       primaryColor: partnerInfo.primary_color || '#5843BE',
       supportEmail: partnerInfo.support_email || 'support@moilapp.com',

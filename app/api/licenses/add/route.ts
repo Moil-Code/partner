@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     const edcInfo = partnerInfo ? {
       programName: partnerInfo.program_name || partnerInfo.name || 'Moil Partners',
       fullName: partnerInfo.name || 'Moil Partners',
-      logo: partnerInfo.logo_url || 'https://res.cloudinary.com/drlcisipo/image/upload/v1705704261/Website%20images/logo_gox0fw.png',
+      logo: partnerInfo.logo_url || undefined, // Don't default to Moil logo - let email template use logoInitial fallback
       logoInitial: partnerInfo.logo_initial || partnerInfo.name?.charAt(0) || 'M',
       primaryColor: partnerInfo.primary_color || '#5843BE',
       supportEmail: partnerInfo.support_email || 'support@moilapp.com',
@@ -103,6 +103,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check if email already has an activated license in external database
+    let skipActivationEmail = false;
+    try {
+      
+      if (process.env.NEXT_PUBLIC_QC_API_KEY) {
+        const externalResponse = await fetch(`${process.env.NEXT_PUBLIC_MOIL_PAYMENT_ACTIVATION}/api/employer/activate_license`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.NEXT_PUBLIC_QC_API_KEY,
+          },
+          body: JSON.stringify({ email: email.toLowerCase() }),
+        });
+
+        if (externalResponse.ok) {
+          const externalData = await externalResponse.json();
+          // If license is already activated in external system, skip sending activation email
+          if (externalData.data?.license_status === 'activated') {
+            skipActivationEmail = true;
+          }
+        }
+      }
+    } catch (externalError) {
+      console.error('Error checking external license status:', externalError);
+      // Continue with normal flow if external check fails
+    }
+
     // Check if team has available licenses
     if (teamId && team) {
       // Count assigned licenses for the team
@@ -144,33 +171,45 @@ export async function POST(request: Request) {
       );
     }
 
-    // Send activation email with dynamic partner org name
+    // Send activation email with dynamic partner org name (skip if already activated in external system)
     const activationUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://business.moilapp.com'}/register?licenseId=${license.id}&ref=moilPartners&org=${orgSlug}`;
     
-    const emailResult = await sendLicenseActivationEmail({
-      email: license.email,
-      activationUrl,
-      adminName: `${adminData.first_name} ${adminData.last_name}`,
-      edc: edcInfo,
-    });
-
-    // Update message_id and email_status based on result
-    if (emailResult.success && emailResult.messageId) {
+    if (skipActivationEmail) {
+      // License already activated in external system - mark as activated and skip email
       await supabase
         .from('licenses')
         .update({ 
-          message_id: emailResult.messageId,
-          email_status: 'sent'
+          is_activated: true,
+          email_status: 'skipped',
+          activated_at: new Date().toISOString()
         })
         .eq('id', license.id);
     } else {
-      console.error('Failed to send activation email:', emailResult.error);
-      await supabase
-        .from('licenses')
-        .update({ 
-          email_status: 'failed'
-        })
-        .eq('id', license.id);
+      const emailResult = await sendLicenseActivationEmail({
+        email: license.email,
+        activationUrl,
+        adminName: `${adminData.first_name} ${adminData.last_name}`,
+        edc: edcInfo,
+      });
+
+      // Update message_id and email_status based on result
+      if (emailResult.success && emailResult.messageId) {
+        await supabase
+          .from('licenses')
+          .update({ 
+            message_id: emailResult.messageId,
+            email_status: 'sent'
+          })
+          .eq('id', license.id);
+      } else {
+        console.error('Failed to send activation email:', emailResult.error);
+        await supabase
+          .from('licenses')
+          .update({ 
+            email_status: 'failed'
+          })
+          .eq('id', license.id);
+      }
     }
 
     // Log activity
@@ -186,14 +225,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { 
-        message: emailResult.success 
-          ? 'License added and activation email sent successfully' 
-          : 'License added but failed to send activation email',
-        emailSent: emailResult.success,
+        message: skipActivationEmail 
+          ? 'License added (user already activated in external system)' 
+          : 'License added and activation email sent successfully',
+        emailSent: !skipActivationEmail,
+        alreadyActivated: skipActivationEmail,
         license: {
           id: license.id,
           email: license.email,
-          isActivated: license.is_activated,
+          isActivated: license.is_activated || skipActivationEmail,
           createdAt: license.created_at,
         }
       },

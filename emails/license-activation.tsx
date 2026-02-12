@@ -52,9 +52,10 @@ export const LicenseActivationEmail = ({
   const edcInfo = { ...defaultEdc, ...edc };
   
   // Dynamic styles based on EDC colors
+  // Use white shade for header to ensure good contrast with all logo colors
   const dynamicHeader = {
     ...header,
-    backgroundColor: edcInfo.primaryColor,
+    backgroundColor: '#f8fafc',
   };
   
   const dynamicButton = {
@@ -114,7 +115,6 @@ export const LicenseActivationEmail = ({
                   ) : (
                     <div style={logoFallback}>{edcInfo.logoInitial}</div>
                   )}
-                  <Text style={logoText}>{edcInfo.programName}</Text>
                 </td>
               </tr>
             </table>
@@ -288,7 +288,7 @@ const container = {
 };
 
 const header = {
-  backgroundColor: '#1e40af',
+  backgroundColor: '#f8fafc', // Light white shade for better contrast with all logo colors
   padding: '40px 0',
   textAlign: 'center' as const,
 };
