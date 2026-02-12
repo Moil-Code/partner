@@ -242,14 +242,14 @@ const DashboardPage = () => {
     setPurchaseError('');
 
     try {
-      const response = await fetch('https://stagebeta.moilapp.com/api/stripe/buy-licenses', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_MOIL_PAYMENT_ACTIVATION}/api/stripe/buy-licenses`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'x-api-key': process.env.NEXT_PUBLIC_QC_API_KEY || '',
         },
         body: JSON.stringify({ 
-          name: partner?.name || 'Moil Partner',
+          name: `Moil Partner ${partner?.program_name}`,
           email: adminEmail,
           numberOfLicenses: count
         }),

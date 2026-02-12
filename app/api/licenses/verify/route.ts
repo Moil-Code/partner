@@ -43,9 +43,28 @@ export async function GET(request: Request) {
 
     // Query partner separately
     // Convert "nerds-labs" -> "nerds labs" (no capitalization needed, names are stored in lowercase)
-    const partnerName = orgSlug.split('-').join(' ');
 
-    console.log(partnerName);
+    if (!orgSlug) {
+      return NextResponse.json(
+        {
+          success: true,
+          verified: license?.id == licenseId,
+          partnerVerified: false,
+        },
+        { status: 200 }
+      );
+    }
+
+    // Special case: moil-partner is always verified (for Moil-created licenses)
+    if (orgSlug === "moil-partner") {
+      return NextResponse.json({
+        success: true,
+        verified: license?.id == licenseId,
+        partnerVerified: true,
+      });
+    }
+
+    const partnerName = orgSlug.split('-').join(' ');
 
     const { data: partner, error: partnerError } = await supabase
       .from('partners')
@@ -54,16 +73,14 @@ export async function GET(request: Request) {
       .eq('status', 'active')
       .single();
 
-    console.log(partner);
-
     if (partnerError || !partner) {
       return NextResponse.json(
         {
-          error: 'Organization not found',
-          verified: true,
+          success: true,
+          verified: license?.id == licenseId,
           partnerVerified: false,
         },
-        { status: 404 }
+        { status: 200 }
       );
     }
 
@@ -77,7 +94,7 @@ export async function GET(request: Request) {
     console.error('License verification error:', error);
     return NextResponse.json(
       {
-        error: 'An unexpected error occurred',
+        success: false,
         verified: false,
         partnerVerified: false,
       },
