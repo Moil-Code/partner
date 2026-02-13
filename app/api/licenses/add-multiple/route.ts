@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { sendBatchLicenseActivationEmails } from '@/lib/email';
 
 export async function POST(request: Request) {
@@ -117,6 +117,38 @@ export async function POST(request: Request) {
       return !trimmed || !trimmed.includes('@');
     });
 
+    // Check globally if any email already has a license from ANY partner using admin client
+    const adminSupabase = createAdminClient();
+    
+    const globalChecks = await Promise.all(
+      parsedEmails.map(async (email) => {
+        const { data: globalLicense } = await adminSupabase
+          .from('licenses')
+          .select('*')
+          .eq('email', email)
+          .single();
+        
+        return { 
+          email, 
+          hasGlobalLicense: !!globalLicense
+        };
+      })
+    );
+
+    const emailsWithGlobalLicenses = globalChecks.filter(check => check.hasGlobalLicense);
+
+    if (emailsWithGlobalLicenses.length > 0) {
+      const errorMessages = emailsWithGlobalLicenses.map(check => check.email).join(', ');
+      
+      return NextResponse.json(
+        { 
+          error: `The following email(s) already have licenses allocated: ${errorMessages}. If this is a mistake, please contact cs@moilapp.com`,
+          emailsWithLicenses: emailsWithGlobalLicenses.map(check => check.email)
+        },
+        { status: 400 }
+      );
+    }
+
     // Check for existing licenses in parallel
     const existingChecks = await Promise.all(
       parsedEmails.map(async (email) => {
@@ -145,13 +177,43 @@ export async function POST(request: Request) {
       .filter(check => check.exists)
       .map(check => check.email);
 
+    // Check external database for already activated licenses using batch endpoint
+    const emailsToSkipActivation = new Set<string>();
+    try {
+      if (process.env.NEXT_PUBLIC_QC_API_KEY && newEmails.length > 0) {
+        const externalResponse = await fetch(`${process.env.NEXT_PUBLIC_MOIL_PAYMENT_ACTIVATION}/api/employer/activate_license`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.NEXT_PUBLIC_QC_API_KEY,
+          },
+          body: JSON.stringify({ emails: newEmails }),
+        });
+
+        if (externalResponse.ok) {
+          const externalData = await externalResponse.json();
+          // Check results for activated licenses
+          if (externalData.data?.results && Array.isArray(externalData.data.results)) {
+            externalData.data.results.forEach((result: any) => {
+              if (result.license_status === 'activated') {
+                emailsToSkipActivation.add(result.email);
+              }
+            });
+          }
+        }
+      }
+    } catch (externalError) {
+      console.error('Error checking external license status:', externalError);
+      // Continue with normal flow if external check fails
+    }
+
     // Insert all new licenses in batch
     const licensesToInsert = newEmails.map(email => ({
       email,
       admin_id: user.id,
       business_name: '',
       business_type: '',
-      is_activated: false,
+      is_activated: emailsToSkipActivation.has(email), // Mark as activated if already activated externally
       team_id: teamId || null,
       performed_by: user.id,
     }));
@@ -169,20 +231,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // Prepare batch email data with dynamic partner org name
-    const emailBatch = (insertedLicenses || []).map(license => ({
-      email: license.email,
-      licenseId: license.id,
-      activationUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://business.moilapp.com'}/register?licenseId=${license.id}&ref=moilPartners&org=${orgSlug}`,
-    }));
+    // Prepare batch email data with dynamic partner org name, excluding already-activated licenses
+    const emailBatch = (insertedLicenses || [])
+      .filter(license => !emailsToSkipActivation.has(license.email))
+      .map(license => ({
+        email: license.email,
+        licenseId: license.id,
+        activationUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://business.moilapp.com'}/register?licenseId=${license.id}&ref=moilPartners&org=${orgSlug}`,
+      }));
 
-    // Send batch emails with partner branding
-    const emailResults = await sendBatchLicenseActivationEmails({
+    // Send batch emails with partner branding (only for licenses that need activation)
+    const emailResults = emailBatch.length > 0 ? await sendBatchLicenseActivationEmails({
       licenses: emailBatch,
       adminName: `${adminData.first_name} ${adminData.last_name}`,
       adminEmail: adminData.email,
       edc: edcInfo,
-    });
+    }) : { results: [], sent: 0, failed: 0 };
 
     // Update message_id and email_status for each license based on results
     if (emailResults.results && Array.isArray(emailResults.results) && emailResults.results.length > 0) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { sendLicenseActivationEmail } from '@/lib/email';
 
 export async function POST(request: Request) {
@@ -82,6 +82,26 @@ export async function POST(request: Request) {
     const teamId = teamMember?.team_id;
     const team = teamMember?.team as unknown as { id: string; purchased_license_count: number } | null;
 
+    // Check globally if email already has a license from ANY partner using admin client
+    const adminSupabase = createAdminClient();
+    
+    const { data: globalLicense } = await adminSupabase
+      .from('licenses')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .single();
+
+    console.log(globalLicense);
+
+    if (globalLicense) {
+      return NextResponse.json(
+        { 
+          error: `This email already has a license allocated. If this is a mistake, please contact cs@moilapp.com`
+        },
+        { status: 400 }
+      );
+    }
+
     // Check if license already exists for this email (check team-wide if in a team)
     let existingLicenseQuery = supabase
       .from('licenses')
@@ -103,10 +123,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email already has an activated license in external database
+    // Check if email already has an activated license in external database using batch endpoint
     let skipActivationEmail = false;
     try {
-      
       if (process.env.NEXT_PUBLIC_QC_API_KEY) {
         const externalResponse = await fetch(`${process.env.NEXT_PUBLIC_MOIL_PAYMENT_ACTIVATION}/api/employer/activate_license`, {
           method: 'POST',
@@ -114,14 +133,17 @@ export async function POST(request: Request) {
             'Content-Type': 'application/json',
             'x-api-key': process.env.NEXT_PUBLIC_QC_API_KEY,
           },
-          body: JSON.stringify({ email: email.toLowerCase() }),
+          body: JSON.stringify({ emails: [email.toLowerCase()] }),
         });
 
         if (externalResponse.ok) {
           const externalData = await externalResponse.json();
-          // If license is already activated in external system, skip sending activation email
-          if (externalData.data?.license_status === 'activated') {
-            skipActivationEmail = true;
+          // Check if any result shows activated status
+          if (externalData.data?.results && externalData.data.results.length > 0) {
+            const result = externalData.data.results[0];
+            if (result.license_status === 'activated') {
+              skipActivationEmail = true;
+            }
           }
         }
       }
