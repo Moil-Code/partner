@@ -91,8 +91,6 @@ export async function POST(request: Request) {
       .eq('email', email.toLowerCase())
       .single();
 
-    console.log(globalLicense);
-
     if (globalLicense) {
       return NextResponse.json(
         { 

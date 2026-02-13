@@ -17,14 +17,28 @@ interface License {
   emailStatus?: string | null;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 interface LicenseListProps {
   licenses: License[];
   loading: boolean;
   onRefresh: () => void;
+  pagination?: PaginationInfo;
+  onPageChange?: (page: number) => void;
+  onSearch?: (search: string) => void;
+  onStatusFilter?: (status: string) => void;
 }
 
-export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) {
+export function LicenseList({ licenses, loading, onRefresh, pagination, onPageChange, onSearch, onStatusFilter }: LicenseListProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [editingLicenseId, setEditingLicenseId] = useState<string | null>(null);
   const [editingEmail, setEditingEmail] = useState('');
   const [updatingEmail, setUpdatingEmail] = useState(false);
@@ -33,6 +47,24 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
   const [licenseToDelete, setLicenseToDelete] = useState<License | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+
+  // Debounced search - only trigger server search after user stops typing
+  useEffect(() => {
+    if (!onSearch) return;
+    
+    const timer = setTimeout(() => {
+      onSearch(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]); // Only depend on searchTerm, not onSearch to avoid infinite loops
+
+  // Handle status filter change
+  const handleStatusChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    if (onStatusFilter) {
+      onStatusFilter(newStatus);
+    }
+  };
 
   // Sync email statuses from Resend to database on component mount
   useEffect(() => {
@@ -52,7 +84,9 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
           const data = await response.json();
           console.log(`Synced ${data.synced} email statuses from Resend`);
           // Refresh the license list to show updated statuses
-          onRefresh();
+          if (onRefresh) {
+            onRefresh();
+          }
         }
       } catch (error) {
         console.error('Failed to sync email statuses:', error);
@@ -62,9 +96,10 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
     };
 
     syncEmailStatuses();
-  }, [licenses.length, loading]); // Only run when licenses count changes or loading state changes
+  }, [licenses.length, loading]); // Only run when licenses count changes or loading state changes, not onRefresh
 
-  const filteredLicenses = licenses.filter(license =>
+  // Use licenses directly since filtering is now done server-side
+  const filteredLicenses = onSearch ? licenses : licenses.filter(license =>
     license.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -307,8 +342,9 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
           </div>
         </div>
         
-        <div className="mt-4 relative">
-           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+        <div className="mt-4 flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
             <input
               type="text"
               placeholder="Search by email..."
@@ -316,6 +352,21 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          {onStatusFilter && (
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+              <select
+                value={statusFilter}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="pl-9 pr-8 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all appearance-none cursor-pointer"
+              >
+                <option value="">All Status</option>
+                <option value="activated">Activated</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
+          )}
         </div>
       </CardHeader>
 
@@ -479,10 +530,37 @@ export function LicenseList({ licenses, loading, onRefresh }: LicenseListProps) 
         )}
 
         <div className="px-6 py-4 border-t border-[var(--border)] bg-[var(--surface-subtle)]/30 flex justify-between items-center text-xs text-[var(--text-tertiary)]">
-          <span>Showing {filteredLicenses.length} license{filteredLicenses.length !== 1 ? 's' : ''}</span>
-          <div className="flex gap-2">
-             {/* Pagination placeholder if needed later */}
-          </div>
+          <span>
+            {pagination 
+              ? `Showing ${((pagination.page - 1) * pagination.limit) + 1}-${Math.min(pagination.page * pagination.limit, pagination.totalCount)} of ${pagination.totalCount} license${pagination.totalCount !== 1 ? 's' : ''}`
+              : `Showing ${filteredLicenses.length} license${filteredLicenses.length !== 1 ? 's' : ''}`
+            }
+          </span>
+          {pagination && pagination.totalPages > 1 && onPageChange && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(pagination.page - 1)}
+                disabled={!pagination.hasPrevPage || loading}
+                className="h-7 px-2 text-xs"
+              >
+                Previous
+              </Button>
+              <span className="px-2 text-[var(--text-secondary)]">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(pagination.page + 1)}
+                disabled={!pagination.hasNextPage || loading}
+                className="h-7 px-2 text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
 

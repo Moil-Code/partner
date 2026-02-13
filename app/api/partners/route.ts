@@ -29,21 +29,46 @@ export async function GET(request: NextRequest) {
     // Moil admins can list all partners
     if (isMoilAdmin && listAll) {
       const includeInactive = searchParams.get('includeInactive') === 'true';
+      const page = parseInt(searchParams.get('page') || '1', 10);
+      const limit = parseInt(searchParams.get('limit') || '50', 10);
+      const search = searchParams.get('search') || '';
       
-      let query = supabase.from('partners').select('*');
+      const validPage = Math.max(1, page);
+      const validLimit = Math.min(Math.max(1, limit), 100);
+      const offset = (validPage - 1) * validLimit;
+      
+      let query = supabase.from('partners').select('*', { count: 'exact' });
       
       if (!includeInactive) {
         query = query.eq('status', 'active');
       }
       
-      const { data: partners, error } = await query.order('name');
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,domain.ilike.%${search}%,program_name.ilike.%${search}%`);
+      }
+      
+      const { data: partners, error, count } = await query
+        .order('name')
+        .range(offset, offset + validLimit - 1);
       
       if (error) {
         console.error('Error fetching partners:', error);
         return NextResponse.json({ error: 'Failed to fetch partners' }, { status: 500 });
       }
       
-      return NextResponse.json({ partners });
+      const totalPages = Math.ceil((count || 0) / validLimit);
+      
+      return NextResponse.json({ 
+        partners,
+        pagination: {
+          page: validPage,
+          limit: validLimit,
+          totalCount: count || 0,
+          totalPages,
+          hasNextPage: validPage < totalPages,
+          hasPrevPage: validPage > 1,
+        }
+      });
     }
 
     // Otherwise, return the current user's partner

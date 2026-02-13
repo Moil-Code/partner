@@ -1,9 +1,22 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+    
+    // Parse pagination and search params
+    const searchParams = request.nextUrl.searchParams;
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || ''; // 'activated', 'pending', or ''
+    
+    // Validate pagination params
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(Math.max(1, limit), 100); // Max 100 per page
+    const offset = (validPage - 1) * validLimit;
 
     // Get current admin user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -45,21 +58,33 @@ export async function GET() {
     const teamId = teamMember?.team_id;
     const team = teamMember?.team as unknown as { id: string; purchased_license_count: number } | null;
 
-    // Get all licenses for the team (or admin if no team)
-    let licensesQuery = supabase
+    // Build base query for licenses
+    let baseQuery = supabase
       .from('licenses')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' });
     
     if (teamId) {
-      // If user is in a team, get all team licenses
-      licensesQuery = licensesQuery.eq('team_id', teamId);
+      baseQuery = baseQuery.eq('team_id', teamId);
     } else {
-      // Fallback to admin-level licenses
-      licensesQuery = licensesQuery.eq('admin_id', user.id);
+      baseQuery = baseQuery.eq('admin_id', user.id);
     }
 
-    const { data: licenses, error: licensesError } = await licensesQuery;
+    // Apply search filter
+    if (search) {
+      baseQuery = baseQuery.or(`email.ilike.%${search}%,business_name.ilike.%${search}%`);
+    }
+
+    // Apply status filter
+    if (status === 'activated') {
+      baseQuery = baseQuery.eq('is_activated', true);
+    } else if (status === 'pending') {
+      baseQuery = baseQuery.eq('is_activated', false);
+    }
+
+    // Get paginated licenses with count in a single query
+    const { data: licenses, error: licensesError, count: totalCount } = await baseQuery
+      .order('created_at', { ascending: false })
+      .range(offset, offset + validLimit - 1);
 
     // Get admin info for licenses to show who added them
     const adminIds = [...new Set((licenses || []).map(l => l.performed_by || l.admin_id).filter(Boolean))];
@@ -87,12 +112,29 @@ export async function GET() {
       );
     }
 
-    // Calculate statistics
-    const assignedLicenses = licenses?.length || 0;
-    const activated = licenses?.filter(l => l.is_activated).length || 0;
+    // Get statistics counts (separate query without filters for accurate totals)
+    let statsQuery = supabase
+      .from('licenses')
+      .select('id, is_activated', { count: 'exact' });
+    
+    if (teamId) {
+      statsQuery = statsQuery.eq('team_id', teamId);
+    } else {
+      statsQuery = statsQuery.eq('admin_id', user.id);
+    }
+
+    const { data: allLicenses, count: totalLicenses } = await statsQuery;
+    
+    const assignedLicenses = totalLicenses || 0;
+    const activated = allLicenses?.filter(l => l.is_activated).length || 0;
     const pending = assignedLicenses - activated;
     const purchasedLicenseCount = team?.purchased_license_count || 0;
     const availableLicenses = purchasedLicenseCount - assignedLicenses;
+
+    // Pagination metadata
+    const totalPages = Math.ceil((totalCount || 0) / validLimit);
+    const hasNextPage = validPage < totalPages;
+    const hasPrevPage = validPage > 1;
 
     // Format licenses for response - include who added the license for team transparency
     const formattedLicenses = (licenses || []).map(license => {
@@ -119,6 +161,14 @@ export async function GET() {
     return NextResponse.json(
       { 
         licenses: formattedLicenses,
+        pagination: {
+          page: validPage,
+          limit: validLimit,
+          totalCount: totalCount || 0,
+          totalPages,
+          hasNextPage,
+          hasPrevPage,
+        },
         statistics: {
           purchased: purchasedLicenseCount,
           assigned: assignedLicenses,

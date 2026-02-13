@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import TeamManagement from '@/components/TeamManagement';
@@ -47,6 +47,15 @@ interface LicenseStats {
   available_licenses: number;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 const DashboardPage = () => {
   const router = useRouter();
   const { toast } = useToast();
@@ -54,6 +63,10 @@ const DashboardPage = () => {
   const [statistics, setStatistics] = useState<Statistics>({ total: 0, activated: 0, pending: 0 });
   const [licenseStats, setLicenseStats] = useState<LicenseStats>({ purchased_license_count: 0, active_purchased_license_count: 0, available_licenses: 0 });
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
@@ -68,7 +81,7 @@ const DashboardPage = () => {
     checkAuthAndFetchLicenses();
     fetchLicenseStats();
     handleUrlParams();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyBrandIdentity = (partnerData: Partner) => {
     const root = document.documentElement;
@@ -106,7 +119,7 @@ const DashboardPage = () => {
       // Refresh stats to show updated counts
       setTimeout(() => {
         fetchLicenseStats();
-        fetchLicenses();
+        initialFetchLicenses();
       }, 1000);
     } else if (errorParam) {
       const errorMessages: { [key: string]: string } = {
@@ -126,6 +139,38 @@ const DashboardPage = () => {
       
       // Clear URL params
       window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  };
+
+  const initialFetchLicenses = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: '1',
+        limit: '50',
+      });
+      
+      const response = await fetch(`/api/licenses/list?${params}`);
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error('Failed to fetch licenses');
+      }
+      const data = await response.json();
+      setLicenses(data.licenses);
+      setStatistics(data.statistics);
+      setPagination(data.pagination);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: 'Failed to load licenses',
+        type: "error"
+      });
+      console.error('Fetch licenses error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -187,16 +232,24 @@ const DashboardPage = () => {
       }
 
       // User is authenticated and has valid role, fetch licenses
-      await fetchLicenses();
+      await initialFetchLicenses();
     } catch (err) {
       console.error('Auth check error:', err);
       router.push('/login');
     }
   };
 
-  const fetchLicenses = async () => {
+  const fetchLicenses = useCallback(async (page?: number, search?: string, status?: string) => {
     try {
-      const response = await fetch('/api/licenses/list');
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: (page ?? currentPage).toString(),
+        limit: '50',
+        ...((search ?? searchQuery) && { search: search ?? searchQuery }),
+        ...((status ?? statusFilter) && { status: status ?? statusFilter }),
+      });
+      
+      const response = await fetch(`/api/licenses/list?${params}`);
       if (!response.ok) {
         if (response.status === 401) {
           router.push('/login');
@@ -207,6 +260,7 @@ const DashboardPage = () => {
       const data = await response.json();
       setLicenses(data.licenses);
       setStatistics(data.statistics);
+      setPagination(data.pagination);
     } catch (err) {
       toast({
         title: "Error",
@@ -217,7 +271,24 @@ const DashboardPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchQuery, statusFilter, router, toast]);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+    fetchLicenses(newPage, searchQuery, statusFilter);
+  }, [fetchLicenses, searchQuery, statusFilter]);
+
+  const handleSearch = useCallback((search: string) => {
+    setSearchQuery(search);
+    setCurrentPage(1); // Reset to first page on search
+    fetchLicenses(1, search, statusFilter);
+  }, [fetchLicenses, statusFilter]);
+
+  const handleStatusFilter = useCallback((status: string) => {
+    setStatusFilter(status);
+    setCurrentPage(1); // Reset to first page on filter change
+    fetchLicenses(1, searchQuery, status);
+  }, [fetchLicenses, searchQuery]);
 
   const fetchLicenseStats = async () => {
     try {
@@ -319,7 +390,11 @@ const DashboardPage = () => {
              <LicenseList 
               licenses={licenses}
               loading={loading}
-              onRefresh={fetchLicenses}
+              onRefresh={() => fetchLicenses(currentPage, searchQuery, statusFilter)}
+              pagination={pagination || undefined}
+              onPageChange={handlePageChange}
+              onSearch={handleSearch}
+              onStatusFilter={handleStatusFilter}
             />
           </div>
           
@@ -334,7 +409,7 @@ const DashboardPage = () => {
               <AddLicenseForm 
                 availableLicenses={licenseStats.available_licenses}
                 onLicensesAdded={() => {
-                  fetchLicenses();
+                  initialFetchLicenses();
                   fetchLicenseStats();
                 }}
               />

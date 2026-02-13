@@ -117,23 +117,21 @@ export async function POST(request: Request) {
       return !trimmed || !trimmed.includes('@');
     });
 
-    // Check globally if any email already has a license from ANY partner using admin client
+    // Check globally if any email already has a license from ANY partner using admin client (optimized batch query)
     const adminSupabase = createAdminClient();
-    
-    const globalChecks = await Promise.all(
-      parsedEmails.map(async (email) => {
-        const { data: globalLicense } = await adminSupabase
-          .from('licenses')
-          .select('*')
-          .eq('email', email)
-          .single();
-        
-        return { 
-          email, 
-          hasGlobalLicense: !!globalLicense
-        };
-      })
-    );
+    const lowercaseEmails = parsedEmails.map(e => e.toLowerCase());
+
+    const { data: existingLicenses } = await adminSupabase
+      .from('licenses')
+      .select('email')
+      .in('email', lowercaseEmails);
+
+    const licensedEmails = new Set(existingLicenses?.map(l => l.email) || []);
+
+    const globalChecks = parsedEmails.map(email => ({
+      email,
+      hasGlobalLicense: licensedEmails.has(email.toLowerCase()),
+    }));
 
     const emailsWithGlobalLicenses = globalChecks.filter(check => check.hasGlobalLicense);
 
