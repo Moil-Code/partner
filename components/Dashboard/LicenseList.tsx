@@ -46,6 +46,7 @@ export function LicenseList({ licenses, loading, onRefresh, pagination, onPageCh
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [licenseToDelete, setLicenseToDelete] = useState<License | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [hasInitialSynced, setHasInitialSynced] = useState(false);
   const { toast } = useToast();
 
   // Debounced search - only trigger server search after user stops typing
@@ -66,14 +67,19 @@ export function LicenseList({ licenses, loading, onRefresh, pagination, onPageCh
     }
   };
 
-  // Sync email statuses from Resend to database on component mount
+  // Sync email statuses from Resend to database on component mount (only once)
   useEffect(() => {
     const syncEmailStatuses = async () => {
+      // Only sync once on initial load
+      if (hasInitialSynced || loading) return;
+      
       // Only sync if there are licenses with message IDs
       const hasMessageIds = licenses.some(license => license.messageId);
-      if (!hasMessageIds || loading) return;
+      if (!hasMessageIds) return;
 
       setSyncingStatuses(true);
+      setHasInitialSynced(true); // Mark as synced to prevent re-running
+      
       try {
         const response = await fetch('/api/licenses/email-status', {
           method: 'POST',
@@ -96,7 +102,7 @@ export function LicenseList({ licenses, loading, onRefresh, pagination, onPageCh
     };
 
     syncEmailStatuses();
-  }, [licenses.length, loading]); // Only run when licenses count changes or loading state changes, not onRefresh
+  }, [licenses.length, loading, hasInitialSynced]); // Only run once when licenses are first loaded
 
   // Use licenses directly since filtering is now done server-side
   const filteredLicenses = onSearch ? licenses : licenses.filter(license =>
@@ -515,8 +521,9 @@ export function LicenseList({ licenses, loading, onRefresh, pagination, onPageCh
                           variant="ghost" 
                           size="sm"
                           onClick={() => openDeleteModal(license)}
-                          className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Delete License"
+                          disabled={license.isActivated}
+                          className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={license.isActivated ? "Cannot delete activated license" : "Delete License"}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>

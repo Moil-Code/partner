@@ -71,6 +71,14 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // Only allow deletion of non-activated licenses
+    if (license.is_activated) {
+      return NextResponse.json(
+        { error: 'Cannot delete an activated license. Only pending licenses can be deleted.' },
+        { status: 400 }
+      );
+    }
+
     // Delete the license
     const { error: deleteError } = await supabase
       .from('licenses')

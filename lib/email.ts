@@ -480,8 +480,9 @@ export async function getBatchEmailStatuses(messageIds: string[]) {
 // Moil admin emails to notify for partner access requests
 const MOIL_ADMIN_EMAILS = [
   'taiwo@moilapp.com',
-  'andre@moilapp.com',
+  'andres@moilapp.com',
   'jacob@moilapp.com',
+  'steve@moilapp.com'
 ];
 
 export interface PartnerAccessRequestData {
