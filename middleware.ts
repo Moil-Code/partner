@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -37,6 +37,7 @@ export async function middleware(request: NextRequest) {
 
   // Allow public access to external API endpoints and payment redirect page
   const isPublicApiRoute = 
+    request.nextUrl.pathname.startsWith('/api/health') ||
     request.nextUrl.pathname.startsWith('/api/licenses/verify') ||
     request.nextUrl.pathname.startsWith('/api/licenses/activate') ||
     request.nextUrl.pathname.startsWith('/api/licenses/purchase') ||
